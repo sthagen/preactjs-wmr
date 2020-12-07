@@ -10,7 +10,7 @@ import npmPlugin from './plugins/npm-plugin/index.js';
 import publicPathPlugin from './plugins/public-path-plugin.js';
 import minifyCssPlugin from './plugins/minify-css-plugin.js';
 import htmlEntriesPlugin from './plugins/html-entries-plugin.js';
-import glob from 'tiny-glob';
+import totalist from 'totalist';
 import aliasesPlugin from './plugins/aliases-plugin.js';
 import processGlobalPlugin from './plugins/process-global-plugin.js';
 import urlPlugin from './plugins/url-plugin.js';
@@ -35,6 +35,7 @@ const pathToPosix = p => p.split(sep).join(posix.sep);
  * @property {string} [publicDir = '']
  * @property {string} [out = '.cache']
  * @property {boolean} [sourcemap]
+ * @property {boolean} [minify = true]
  * @property {Record<string, string>} [aliases] module aliases
  * @property {boolean} [profile] Enable bundler performance profiling
  * @property {Record<string, string>} [env]
@@ -66,20 +67,21 @@ export async function bundleProd({
 	env = {},
 	plugins,
 	output,
+	minify = true,
 	npmChunks = false
 }) {
 	cwd = cwd || '';
 	root = root || cwd;
 
-	const htmlFiles = await glob('**/*.html', {
-		cwd,
-		absolute: true,
-		filesOnly: true
-	});
-
 	// note: we intentionally pass these to Rollup as posix paths
 	const ignore = /^\.\/(node_modules|dist|build)\//;
-	const input = htmlFiles.map(p => './' + pathToPosix(relative('.', p))).filter(p => !ignore.test(p));
+	/** @type {string[]} */ const input = [];
+
+	await totalist(cwd, (rel, abs) => {
+		if (ignore.test(abs)) return;
+		if (!/\.html?/.test(rel)) return;
+		input.push('./' + pathToPosix(relative(root, abs)));
+	});
 
 	const bundle = await rollup.rollup({
 		input,
@@ -117,7 +119,7 @@ export async function bundleProd({
 			jsonPlugin(),
 			bundlePlugin({ cwd }),
 			optimizeGraphPlugin({ publicPath: '/' }),
-			minifyCssPlugin({ sourcemap }),
+			minify && minifyCssPlugin({ sourcemap }),
 			copyAssetsPlugin({ cwd })
 		].concat(plugins || [])
 	});
@@ -136,7 +138,7 @@ export async function bundleProd({
 			return fileName;
 		},
 		hoistTransitiveImports: true,
-		plugins: [terser({ compress: true, sourcemap })],
+		plugins: [minify && terser({ compress: true, sourcemap })],
 		sourcemap,
 		sourcemapPathTransform(p, mapPath) {
 			let url = pathToPosix(relative(cwd, resolve(dirname(mapPath), p)));
