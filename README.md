@@ -10,6 +10,7 @@ All the features you'd expect and more, from development to production:
 ↻ &nbsp; Hot reloading for modules, Preact components and CSS<br>
 ⚡️ &nbsp; Lightning-fast JSX support that you can debug in the browser<br>
 💄 &nbsp; Import CSS files and [CSS Modules](https://github.com/css-modules/css-modules) (`*.module.css`)<br>
+🔩 &nbsp; Out-of-the-box support for [TypeScript](https://www.typescriptlang.org/)<br>
 📂 &nbsp; Static file serving with hot reloading of CSS and images<br>
 🗜 &nbsp; Highly optimized Rollup-based production output (`wmr build`)<br>
 📑 &nbsp; Crawls and pre-renders your app's pages to static HTML at build time<br>
@@ -21,6 +22,10 @@ All the features you'd expect and more, from development to production:
 Create a new project in seconds using [create-wmr](https://npm.im/create-wmr):
 
 <strong><code>npm init wmr your-project-name</code></strong>
+
+or
+
+<strong><code>yarn create wmr your-project-name</code></strong>
 
 <p>
 <img width="400" src="https://user-images.githubusercontent.com/105127/100917537-4661e100-34a5-11eb-89bd-565b7bc31919.gif">
@@ -149,6 +154,34 @@ export async function serve(config) {
 ```
 
 See [the full list of options](https://github.com/preactjs/wmr/blob/master/types.d.ts).
+
+## Recipes
+
+Here we'll outline some recipes that might come in handy when making an application with `wmr`.
+
+### Minifying HTML
+
+To minify HTML we can use [rollup-plugin-html-minifier](https://www.npmjs.com/package/rollup-plugin-html-minifier).
+
+```sh
+yarn add rollup-plugin-html-minifier
+## or
+npm i --save rollup-plugin-html-minifier
+```
+
+After we've installed this package we can add it to the config file (`wmr.config.js`).
+
+```js
+import htmlMinifier from 'rollup-plugin-html-minifier';
+
+export function build({ plugins }) {
+	plugins.push(
+		htmlMinifier({
+			// any options here
+		})
+	);
+}
+```
 
 ## Contributing
 
