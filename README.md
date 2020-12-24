@@ -1,5 +1,10 @@
 # WMR
 
+[![npm](https://img.shields.io/npm/v/wmr.svg)](http://npm.im/wmr)
+[![install size](https://packagephobia.com/badge?p=wmr)](https://packagephobia.com/result?p=wmr)
+[![OpenCollective Backers](https://opencollective.com/preact/backers/badge.svg)](#backers)
+[![OpenCollective Sponsors](https://opencollective.com/preact/sponsors/badge.svg)](#sponsors)
+
 **The tiny all-in-one development tool for modern web apps**, in a single 2mb file with no dependencies.
 
 All the features you'd expect and more, from development to production:
@@ -86,6 +91,17 @@ render(<App />, document.body);
 		"start": "wmr",
 		"build": "wmr build",
 		"serve": "wmr serve --http2"
+	}
+}
+```
+
+`preact/compat` is our compatibility layer that allows you to leverage the many libraries of the React ecosystem and use them with Preact. If this is something you'd like to use with WMR you can add an `alias` section as well to your `package.json`:
+
+```json
+{
+	"alias": {
+		"react": "preact/compat",
+		"react-dom": "preact/compat"
 	}
 }
 ```
