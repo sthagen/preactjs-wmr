@@ -1,12 +1,13 @@
-import { useLoc } from './lib/loc.js';
+import { useLocation } from './lib/loc.js';
 
 export default function Header() {
-	const { url }: { url: string } = useLoc();
+	const { url }: { url: string } = useLocation();
 	return (
 		<header>
 			<nav>
 				<a href="/">Home</a>
 				<a href="/about">About</a>
+				<a href="/lazy-and-late">Lazy and Late</a>
 				<a href="/compat">Compat</a>
 				<a href="/class-fields">Class-Fields</a>
 				<a href="/files">Files</a>

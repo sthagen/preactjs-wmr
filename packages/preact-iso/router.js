@@ -1,5 +1,5 @@
 import { h, createContext, cloneElement } from 'preact';
-import { useContext, useMemo, useReducer, useEffect, useRef } from 'preact/hooks';
+import { useContext, useMemo, useReducer, useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 
 const UPDATE = (state, url, push) => {
 	if (url && url.type === 'click') {
@@ -16,6 +16,28 @@ const UPDATE = (state, url, push) => {
 	if (push === true) history.pushState(null, '', url);
 	else if (push === false) history.replaceState(null, '', url);
 	return url;
+};
+
+export const exec = (url, route, matches) => {
+	url = url.trim('/').split('/');
+	route = (route || '').trim('/').split('/');
+	for (let i = 0, val; i < Math.max(url.length, route.length); i++) {
+		let [, m, param, flag] = (route[i] || '').match(/^(:?)(.*?)([+*?]?)$/);
+		val = url[i];
+		// segment match:
+		if (!m && param == val) continue;
+		// segment mismatch / missing required field:
+		if (!m || (!val && flag != '?' && flag != '*')) return;
+		// field match:
+		matches[param] = val && decodeURIComponent(val);
+		// normal/optional field:
+		if (flag >= '?') continue;
+		// rest (+/*) match:
+		matches[param] = url.slice(i).map(decodeURIComponent).join('/');
+		break;
+	}
+
+	return matches;
 };
 
 export function LocationProvider(props) {
@@ -36,7 +58,7 @@ export function LocationProvider(props) {
 			removeEventListener('click', route);
 			removeEventListener('popstate', route);
 		};
-	});
+	}, []);
 
 	// @ts-ignore
 	return h(LocationProvider.ctx.Provider, { value }, props.children);
@@ -45,7 +67,7 @@ export function LocationProvider(props) {
 export function Router(props) {
 	const [, update] = useReducer(c => c + 1, 0);
 
-	const loc = useLoc();
+	const loc = useLocation();
 
 	const { url, path, query } = loc;
 
@@ -59,20 +81,33 @@ export function Router(props) {
 		pending.current = null;
 		prev.current = cur.current;
 		prevChildren.current = curChildren.current;
+		// old <Committer> uses the pending promise ref to know whether to render
+		prevChildren.current.props.pending = pending;
 		cur.current = loc;
 	}
+
+	curChildren.current = useMemo(() => {
+		let p, d, m;
+		[].concat(props.children || []).some(vnode => {
+			const matches = exec(path, vnode.props.path, (m = { path, query }));
+			if (matches) return (p = cloneElement(vnode, m));
+			if (vnode.props.default) d = cloneElement(vnode, m);
+		});
+
+		return h(Committer, {}, h(RouteContext.Provider, { value: m }, p || d));
+	}, [url]);
 
 	this.componentDidCatch = err => {
 		if (err && err.then) pending.current = err;
 	};
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		let p = pending.current;
 
 		const commit = () => {
 			if (cur.current.url !== url || pending.current !== p) return;
+			prev.current = prevChildren.current = pending.current = null;
 			if (props.onLoadEnd) props.onLoadEnd(url);
-			prev.current = prevChildren.current = null;
 			update(0);
 		};
 
@@ -82,20 +117,21 @@ export function Router(props) {
 		} else commit();
 	}, [url]);
 
-	const children = [].concat(...props.children);
+	// Hi! Wondering what this horrid line is for? That's totally reasonable, it is gross.
+	// It prevents the old route from being remounted because it got shifted in the children Array.
+	if (this.__v && this.__v.__k) this.__v.__k.reverse();
 
-	let a = children.filter(c => c.props.path === path);
+	return [curChildren.current, prevChildren.current];
+}
 
-	if (a.length == 0) a = children.filter(c => c.props.default);
-
-	curChildren.current = a.map((p, i) => cloneElement(p, { path, query }));
-
-	return curChildren.current.concat(prevChildren.current || []);
+function Committer({ pending, children }) {
+	return pending && !pending.current ? null : children;
 }
 
 Router.Provider = LocationProvider;
 
 LocationProvider.ctx = createContext(/** @type {{ url: string, path: string, query: object, route }} */ ({}));
+const RouteContext = createContext({});
 
-export const useLoc = () => useContext(LocationProvider.ctx);
-export const useLocation = useLoc;
+export const useLocation = () => useContext(LocationProvider.ctx);
+export const useRoute = () => useContext(RouteContext);
