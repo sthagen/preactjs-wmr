@@ -18,14 +18,27 @@ sade('create-wmr [dir]', true)
 		const origCwd = process.cwd();
 		let cwd = process.cwd();
 		if (dir) {
-			if ((await fs.stat(dir)).isDirectory() && !opts.force) {
+			try {
+				if ((await fs.stat(dir)).isDirectory() && !opts.force) {
+					process.stderr.write(
+						`${red(
+							`Refusing to overwrite directory! Please specify a different directory or use the '--force' flag`
+						)}\n`
+					);
+					process.exit(1);
+				}
+			} catch {}
+			cwd = resolve(cwd, dir || '.');
+			try {
+				await fs.mkdir(cwd, { recursive: true });
+			} catch {
 				process.stderr.write(
-					`${red(`Refusing to overwrite directory! Please specify a different directory or use the '--force' flag`)}\n`
+					`${red(
+						`There is already a file with the same name as the directory you specified. Please provide a different directory name`
+					)}\n`
 				);
 				process.exit(1);
 			}
-			cwd = resolve(cwd, dir || '.');
-			await fs.mkdir(cwd, { recursive: true });
 			process.chdir(cwd);
 		}
 		const ctx = {
@@ -45,7 +58,7 @@ sade('create-wmr [dir]', true)
 			process.stderr.write(`\n${red(`${packageManager} cannot be found`)}\n`);
 			process.exit(1);
 		});
-		await install(['wmr', 'preact', 'preact-iso'], { prefer: packageManager, cwd });
+		await install(['wmr@^1.2.0', 'preact@^10.5.12', 'preact-iso@^1.0.0'], { prefer: packageManager, cwd });
 		spinner.succeed('installed WMR.');
 
 		if (opts.eslint) {

@@ -1,6 +1,6 @@
 {
 	"name": "wmr",
-	"version": "1.3.0",
+	"version": "1.3.1",
 	"bin": "wmr.cjs",
 	"type": "module",
 	"scripts": {
@@ -20,7 +20,8 @@
 	"repository": "preactjs/wmr",
 	"files": [
 		"wmr.cjs",
-		"types.d.ts"
+		"types.d.ts",
+		"README.md"
 	],
 	"types": "./types.d.ts",
 	"babel": {
