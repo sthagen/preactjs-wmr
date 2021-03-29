@@ -1,25 +1,16 @@
 import { resolve, dirname, relative, sep, posix } from 'path';
+import * as kl from 'kolorist';
 import { promises as fs, createReadStream } from 'fs';
 import chokidar from 'chokidar';
-import htmPlugin from './plugins/htm-plugin.js';
-import sucrasePlugin from './plugins/sucrase-plugin.js';
 import wmrPlugin, { getWmrClient } from './plugins/wmr/plugin.js';
 import wmrStylesPlugin, { modularizeCss, processSass } from './plugins/wmr/styles-plugin.js';
 import { createPluginContainer } from './lib/rollup-plugin-container.js';
 import { transformImports } from './lib/transform-imports.js';
-import aliasesPlugin from './plugins/aliases-plugin.js';
-import urlPlugin from './plugins/url-plugin.js';
 import { normalizeSpecifier } from './plugins/npm-plugin/index.js';
 import sassPlugin from './plugins/sass-plugin.js';
-import processGlobalPlugin from './plugins/process-global-plugin.js';
 import { getMimeType } from './lib/mimetypes.js';
-import fastCjsPlugin from './plugins/fast-cjs-plugin.js';
-import resolveExtensionsPlugin from './plugins/resolve-extensions-plugin.js';
-import bundlePlugin from './plugins/bundle-plugin.js';
-import nodeBuiltinsPlugin from './plugins/node-builtins-plugin.js';
-import jsonPlugin from './plugins/json-plugin.js';
-import externalUrlsPlugin from './plugins/external-urls-plugin.js';
-// import { resolvePackageVersion } from './plugins/npm-plugin/registry.js';
+import { codeFrame } from './lib/output-utils.js';
+import { getPlugins } from './lib/plugins.js';
 
 const NOOP = () => {};
 
@@ -32,74 +23,24 @@ const WRITE_CACHE = new Map();
 export const moduleGraph = new Map();
 
 /**
- * @param {object} [options]
- * @param {string} [options.cwd = '.']
- * @param {string} [options.root] cwd without ./public suffix
- * @param {string} [options.out = '.cache']
- * @param {string} [options.distDir] if set, ignores watch events within this directory
- * @param {boolean} [options.sourcemap]
- * @param {Record<string, string>} [options.aliases]
- * @param {Record<string, string>} [options.env]
- * @param {import('rollup').Plugin[]} [options.plugins]
- * @param {boolean} [options.profile] Enable bundler performance profiling
- * @param {(error: Error & { clientMessage?: string })=>void} [options.onError]
- * @param {(event: { changes: string[], duration: number })=>void} [options.onChange]
+ * @param {import('wmr').BuildOptions & { distDir: string }} options
  * @returns {import('polka').Middleware}
  */
-export default function wmrMiddleware({
-	cwd = '.',
-	root,
-	out = '.cache',
-	distDir = 'dist',
-	env = {},
-	aliases,
-	onError = NOOP,
-	onChange = NOOP,
-	plugins,
-	features
-} = {}) {
-	cwd = resolve(process.cwd(), cwd || '.');
+export default function wmrMiddleware(options) {
+	let { cwd, root, out, distDir = 'dist', onError, onChange = NOOP } = options;
+
 	distDir = resolve(dirname(out), distDir);
 
-	root = root || cwd;
-
-	const NonRollup = createPluginContainer(
-		[
-			externalUrlsPlugin(),
-			nodeBuiltinsPlugin({}),
-			urlPlugin({ inline: true, cwd }),
-			jsonPlugin(),
-			bundlePlugin({ inline: true, cwd }),
-			aliasesPlugin({ aliases, cwd: root }),
-			sucrasePlugin({
-				typescript: true,
-				sourcemap: false,
-				production: false
-			}),
-			processGlobalPlugin({ NODE_ENV: 'development', env }),
-			sassPlugin(),
-			htmPlugin({ production: false }),
-			wmrPlugin({ hot: true, preact: features.preact }),
-			fastCjsPlugin({
-				// Only transpile CommonJS in node_modules and explicit .cjs files:
-				include: /(?:[/\\]node_modules[/\\]|\.cjs$)/
-			}),
-			resolveExtensionsPlugin({
-				typescript: true,
-				index: true
-			})
-		].concat(plugins || []),
-		{
-			cwd,
-			writeFile: (filename, source) => writeCacheFile(out, filename, source),
-			output: {
-				// assetFileNames: '@asset/[name][extname]',
-				// chunkFileNames: '[name][extname]',
-				assetFileNames: '[name][extname]?asset',
-				dir: out
-			}
+	const NonRollup = createPluginContainer(getPlugins(options), {
+		cwd,
+		writeFile: (filename, source) => writeCacheFile(out, filename, source),
+		output: {
+			// assetFileNames: '@asset/[name][extname]',
+			// chunkFileNames: '[name][extname]',
+			assetFileNames: '[name][extname]?asset',
+			dir: out
 		}
-	);
+	});
 
 	NonRollup.buildStart();
 
@@ -130,20 +71,24 @@ export default function wmrMiddleware({
 		// Delete file from the in-memory cache:
 		WRITE_CACHE.delete(filename);
 
-		filename = '/' + filename;
 		const mod = moduleGraph.get(filename);
-
 		if (!mod) return false;
 
 		if (mod.acceptingUpdates) {
+			mod.stale = true;
 			pendingChanges.add(filename);
 			return true;
 		} else if (mod.dependents.size) {
-			return [...mod.dependents].every(function (value) {
-				mod.stale = true;
-				return bubbleUpdates(value, visited);
+			let accepts = true;
+			[...mod.dependents].forEach(value => {
+				if (!bubbleUpdates(value, visited)) accepts = false;
 			});
+
+			if (accepts) mod.stale = true;
+
+			return accepts;
 		}
+
 		// We need a full-reload signal
 		return false;
 	}
@@ -162,12 +107,19 @@ export default function wmrMiddleware({
 			WRITE_CACHE.delete(filename);
 			pendingChanges.add('/' + filename);
 		} else if (/\.(mjs|[tj]sx?)$/.test(filename)) {
+			if (!moduleGraph.has(filename)) {
+				clearTimeout(timeout);
+				return;
+			}
+
 			if (!bubbleUpdates(filename)) {
+				pendingChanges.clear();
 				clearTimeout(timeout);
 				onChange({ reload: true });
 			}
 		} else {
 			WRITE_CACHE.delete(filename);
+			pendingChanges.clear();
 			clearTimeout(timeout);
 			onChange({ reload: true });
 		}
@@ -311,107 +263,116 @@ export const TRANSFORMS = {
 	},
 
 	// Handle individual JavaScript modules
-	async js({ id, file, prefix, res, cwd, out, NonRollup }) {
-		res.setHeader('Content-Type', 'application/javascript;charset=utf-8');
+	async js({ id, file, prefix, res, cwd, out, NonRollup, req }) {
+		let code;
+		try {
+			res.setHeader('Content-Type', 'application/javascript;charset=utf-8');
 
-		if (WRITE_CACHE.has(id)) return WRITE_CACHE.get(id);
+			if (WRITE_CACHE.has(id)) return WRITE_CACHE.get(id);
 
-		const resolved = await NonRollup.resolveId(id);
-		const resolvedId = typeof resolved == 'object' ? resolved && resolved.id : resolved;
-		let result = resolvedId && (await NonRollup.load(resolvedId));
+			const resolved = await NonRollup.resolveId(id);
+			const resolvedId = typeof resolved == 'object' ? resolved && resolved.id : resolved;
+			let result = resolvedId && (await NonRollup.load(resolvedId));
 
-		let code = typeof result == 'object' ? result && result.code : result;
+			code = typeof result == 'object' ? result && result.code : result;
 
-		if (code == null || code === false) {
-			if (prefix) file = file.replace(prefix, '');
-			code = await fs.readFile(resolve(cwd, file), 'utf-8');
-		}
+			if (code == null || code === false) {
+				if (prefix) file = file.replace(prefix, '');
+				code = await fs.readFile(resolve(cwd, file), 'utf-8');
+			}
 
-		code = await NonRollup.transform(code, id);
+			code = await NonRollup.transform(code, id);
 
-		code = await transformImports(code, id, {
-			resolveImportMeta(property) {
-				return NonRollup.resolveImportMeta(property);
-			},
-			async resolveId(spec, importer) {
-				if (spec === 'wmr') return '/_wmr.js';
-				if (/^(data:|https?:|\/\/)/.test(spec)) return spec;
+			code = await transformImports(code, id, {
+				resolveImportMeta(property) {
+					return NonRollup.resolveImportMeta(property);
+				},
+				async resolveId(spec, importer) {
+					if (spec === 'wmr') return '/_wmr.js';
+					if (/^(data:|https?:|\/\/)/.test(spec)) return spec;
 
-				if (!moduleGraph.has(importer)) {
-					moduleGraph.set(importer, { dependencies: new Set(), dependents: new Set(), acceptingUpdates: false });
-				}
-				const mod = moduleGraph.get(importer);
+					let graphId = importer.startsWith('/') ? importer.slice(1) : importer;
+					if (!moduleGraph.has(graphId)) {
+						moduleGraph.set(graphId, { dependencies: new Set(), dependents: new Set(), acceptingUpdates: false });
+					}
+					const mod = moduleGraph.get(graphId);
 
-				// const resolved = await NonRollup.resolveId(spec, importer);
-				const resolved = await NonRollup.resolveId(spec, file);
-				if (resolved) {
-					spec = typeof resolved == 'object' ? resolved.id : resolved;
-					if (/^(\/|\\|[a-z]:\\)/i.test(spec)) {
-						spec = relative(dirname(file), spec).split(sep).join(posix.sep);
-						if (!/^\.?\.?\//.test(spec)) {
-							spec = './' + spec;
+					// const resolved = await NonRollup.resolveId(spec, importer);
+					const resolved = await NonRollup.resolveId(spec, file);
+					if (resolved) {
+						spec = typeof resolved == 'object' ? resolved.id : resolved;
+						if (/^(\/|\\|[a-z]:\\)/i.test(spec)) {
+							spec = relative(dirname(file), spec).split(sep).join(posix.sep);
+							if (!/^\.?\.?\//.test(spec)) {
+								spec = './' + spec;
+							}
+						}
+						if (typeof resolved == 'object' && resolved.external) {
+							// console.log('external: ', spec);
+							if (/^(data|https?):/.test(spec)) return spec;
+
+							spec = relative(cwd, spec).split(sep).join(posix.sep);
+							if (!/^(\/|[\w-]+:)/.test(spec)) spec = `/${spec}`;
+							return spec;
 						}
 					}
-					if (typeof resolved == 'object' && resolved.external) {
-						// console.log('external: ', spec);
-						if (/^(data|https?):/.test(spec)) return spec;
 
-						spec = relative(cwd, spec).split(sep).join(posix.sep);
-						if (!/^(\/|[\w-]+:)/.test(spec)) spec = `/${spec}`;
-						return spec;
+					// \0abc:foo --> /@abcF/foo
+					spec = spec.replace(/^\0?([a-z-]+):(.+)$/, (s, prefix, spec) => {
+						// \0abc:/abs/disk/path --> /@abc/cwd-relative-path
+						if (spec[0] === '/' || spec[0] === sep) {
+							spec = relative(cwd, spec).split(sep).join(posix.sep);
+						}
+						return '/@' + prefix + '/' + spec;
+					});
+
+					// foo.css --> foo.css.js (import of CSS Modules proxy module)
+					if (spec.match(/\.(css|s[ac]ss)$/)) spec += '.js';
+
+					// Bare specifiers are npm packages:
+					if (!/^\0?\.?\.?[/\\]/.test(spec)) {
+						const meta = normalizeSpecifier(spec);
+
+						// // Option 1: resolve all package verions (note: adds non-trivial delay to imports)
+						// await resolvePackageVersion(meta);
+						// // Option 2: omit package versions that resolve to the root
+						// // if ((await resolvePackageVersion({ module: meta.module, version: '' })).version === meta.version) {
+						// // 	meta.version = '';
+						// // }
+						// spec = `/@npm/${meta.module}${meta.version ? '@' + meta.version : ''}${meta.path ? '/' + meta.path : ''}`;
+
+						// Option 3: omit root package versions
+						spec = `/@npm/${meta.module}${meta.path ? '/' + meta.path : ''}`;
 					}
-				}
 
-				// \0abc:foo --> /@abcF/foo
-				spec = spec.replace(/^\0?([a-z-]+):(.+)$/, (s, prefix, spec) => {
-					// \0abc:/abs/disk/path --> /@abc/cwd-relative-path
-					if (spec[0] === '/' || spec[0] === sep) {
-						spec = relative(cwd, spec).split(sep).join(posix.sep);
+					const modSpec = spec.startsWith('../') ? spec.replace(/..\/g/, '') : spec.replace('./', '');
+					mod.dependencies.add(modSpec);
+					if (!moduleGraph.has(modSpec)) {
+						moduleGraph.set(modSpec, { dependencies: new Set(), dependents: new Set(), acceptingUpdates: false });
 					}
-					return '/@' + prefix + '/' + spec;
-				});
 
-				// foo.css --> foo.css.js (import of CSS Modules proxy module)
-				if (spec.match(/\.(css|s[ac]ss)$/)) spec += '.js';
+					const specModule = moduleGraph.get(modSpec);
+					specModule.dependents.add(graphId);
+					if (specModule.stale) {
+						return spec + `?t=${Date.now()}`;
+					}
 
-				// Bare specifiers are npm packages:
-				if (!/^\0?\.?\.?[/\\]/.test(spec)) {
-					const meta = normalizeSpecifier(spec);
-
-					// // Option 1: resolve all package verions (note: adds non-trivial delay to imports)
-					// await resolvePackageVersion(meta);
-					// // Option 2: omit package versions that resolve to the root
-					// // if ((await resolvePackageVersion({ module: meta.module, version: '' })).version === meta.version) {
-					// // 	meta.version = '';
-					// // }
-					// spec = `/@npm/${meta.module}${meta.version ? '@' + meta.version : ''}${meta.path ? '/' + meta.path : ''}`;
-
-					// Option 3: omit root package versions
-					spec = `/@npm/${meta.module}${meta.path ? '/' + meta.path : ''}`;
+					return spec;
 				}
+			});
 
-				const modSpec = spec.replace('../', '/').replace('./', '/');
-				mod.dependencies.add(modSpec);
-				if (!moduleGraph.has(modSpec)) {
-					moduleGraph.set(modSpec, { dependencies: new Set(), dependents: new Set(), acceptingUpdates: false });
-				}
+			writeCacheFile(out, id, code);
 
-				const specModule = moduleGraph.get(modSpec);
-				specModule.dependents.add(importer);
-				if (specModule.stale) {
-					specModule.stale = false;
-					return spec + `?t=${Date.now()}`;
-				}
-
-				return spec;
+			return code;
+		} catch (e) {
+			if (code && e.loc && e.loc.line) {
+				e.codeFrame = kl.stripColors(codeFrame(code, e.loc));
+				console.error('[Build error]:\n' + e.codeFrame);
 			}
-		});
 
-		writeCacheFile(out, id, code);
-
-		return code;
+			throw e;
+		}
 	},
-
 	// Handles "CSS Modules" proxy modules (style.module.css.js)
 	async cssModule({ id, file, cwd, out, res }) {
 		res.setHeader('Content-Type', 'application/javascript;charset=utf-8');

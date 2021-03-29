@@ -1,6 +1,6 @@
-import { h, render } from 'preact';
 import { LocationProvider, Router } from './lib/loc.js';
 import lazy, { ErrorBoundary } from './lib/lazy.js';
+import hydrate from './lib/hydrate';
 import Home from './pages/home.js';
 // import About from './pages/about/index.js';
 import NotFound from './pages/_404.js';
@@ -20,6 +20,7 @@ const CompatPage = lazy(() => import('./pages/compat.js'));
 const ClassFields = lazy(() => import('./pages/class-fields.js'));
 const Files = lazy(() => import('./pages/files/index.js'));
 const Environment = lazy(async () => (await import('./pages/environment/index.js')).Environment);
+const JSONView = lazy(async () => (await import('./pages/json.js')).JSONView);
 
 export function App() {
 	return (
@@ -35,6 +36,7 @@ export function App() {
 						<ClassFields path="/class-fields" />
 						<Files path="/files" />
 						<Environment path="/env" />
+						<JSONView path="/json" />
 						<NotFound default />
 					</Router>
 				</ErrorBoundary>
@@ -44,7 +46,7 @@ export function App() {
 }
 
 if (typeof window !== 'undefined') {
-	render(<App />, document.body);
+	hydrate(<App />, document.body);
 }
 
 export async function prerender(data) {
@@ -53,4 +55,4 @@ export async function prerender(data) {
 }
 
 // @ts-ignore
-if (module.hot) module.hot.accept(u => render(<u.module.App />, document.body));
+if (module.hot) module.hot.accept(u => hydrate(<u.module.App />, document.body));

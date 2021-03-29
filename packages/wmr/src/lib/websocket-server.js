@@ -19,12 +19,15 @@ export default class WebSocketServer extends ws.Server {
 		client.on('message', function (data) {
 			const message = JSON.parse(data.toString());
 			if (message.type === 'hotAccepted') {
-				if (!moduleGraph.has(message.id)) {
-					moduleGraph.set(message.id, { dependencies: new Set(), dependents: new Set(), acceptingUpdates: false });
+				let [id] = message.id.split('?');
+				id = id.startsWith('/') ? id.slice(1) : id;
+				if (!moduleGraph.has(id)) {
+					moduleGraph.set(id, { dependencies: new Set(), dependents: new Set(), acceptingUpdates: false });
 				}
 
-				const entry = moduleGraph.get(message.id);
+				const entry = moduleGraph.get(id);
 				entry.acceptingUpdates = true;
+				entry.stale = false;
 			}
 		});
 	}

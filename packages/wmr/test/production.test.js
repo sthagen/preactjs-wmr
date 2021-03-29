@@ -26,13 +26,14 @@ describe('production', () => {
 
 	describe('demo app', () => {
 		it('should serve the demo app', async () => {
-			await loadFixture('../../demo', env);
+			await loadFixture('../../../../examples/demo', env);
 			for (const d of ['dist', 'node_modules', '.cache']) {
 				await fs.rmdir(path.join(env.tmp.path, d), { recursive: true });
 			}
 			instance = await runWmr(env.tmp.path, 'build', '--prerender');
 			const code = await instance.done;
 			const output = instance.output.join('\n');
+			console.log(output);
 			if (code !== 0 || /error/i.test(output)) {
 				console.info(output);
 			} else {
@@ -101,7 +102,8 @@ describe('production', () => {
 			expect(html).toMatch(/This is the home page/);
 
 			// Ensure there were no errors:
-			expect(logs).toEqual([]);
+			// TODO: Investigate preloading warnings
+			expect(logs.filter(msg => !/warning: A preload/i.test(msg))).toEqual([]);
 
 			// Print stats:
 			const dent = t => t.replace(/^/gm, '  ');
@@ -241,21 +243,65 @@ describe('production', () => {
 			const main = await fs.readFile(path.join(env.tmp.path, 'dist', roots[2]), 'utf8');
 
 			// https://cdn.example.com/assets/math.d41e7373.css
-			expect(math.includes(`("https://cdn.example.com/assets/${assets[1]}")`)).toBe(true);
-			expect(math.includes(`import("./${chunks[0]}")`)).toBe(true);
+			expect(math).toMatch(`("https://cdn.example.com/assets/${assets[1]}")`);
+			expect(math).toMatch(`import("./${chunks[0]}")`);
 
 			// (preload) https://cdn.example.com/assets/math.d41e7373.css
-			expect(main.includes(`$w_s$("https://cdn.example.com/assets/${assets[1]}")`)).toBe(true);
+			expect(main).toMatch(`$w_s$("https://cdn.example.com/assets/${assets[1]}")`);
 
 			// HTML stylesheet: https://cdn.example.com/assets/index.0544f0a6.css
-			expect(html.includes(`href="https://cdn.example.com/assets/${assets[0]}"`)).toBe(true);
+			expect(html).toMatch(`href="https://cdn.example.com/assets/${assets[0]}"`);
 
 			// HTML script: https://cdn.example.com/assets/index.0544f0a6.css
-			expect(html.includes(`src="https://cdn.example.com/${roots[2]}"`)).toBe(true);
+			expect(html).toMatch(`src="https://cdn.example.com/${roots[2]}"`);
+		});
+
+		it('should respect `config.publicPath` value (ts)', async () => {
+			await loadFixture('publicpath-typescript', env);
+			instance = await runWmr(env.tmp.path, 'build');
+			const code = await instance.done;
+			console.info(instance.output.join('\n'));
+			expect(code).toBe(0);
+
+			const readdir = async f => (await fs.readdir(path.join(env.tmp.path, f))).filter(f => f[0] !== '.');
+
+			const assets = await readdir('dist/assets');
+			const chunks = await readdir('dist/chunks');
+			const roots = await readdir('dist');
+
+			expect(assets).toEqual([expect.stringMatching(/^index\.\w+\.css$/), expect.stringMatching(/^math\.\w+\.css$/)]);
+
+			expect(chunks).toEqual([expect.stringMatching(/^constants\.\w+\.js$/), expect.stringMatching(/^math\.\w+\.js$/)]);
+
+			expect(roots).toEqual(['assets', 'chunks', expect.stringMatching(/^index\.\w+\.js$/), 'index.html']);
+
+			const html = await fs.readFile(path.join(env.tmp.path, 'dist', 'index.html'), 'utf8');
+			const math = await fs.readFile(path.join(env.tmp.path, 'dist', 'chunks', chunks[1]), 'utf8');
+			const main = await fs.readFile(path.join(env.tmp.path, 'dist', roots[2]), 'utf8');
+
+			// https://cdn.example.com/assets/math.d41e7373.css
+			expect(math).toMatch(`("https://cdn.example.com/assets/${assets[1]}")`);
+			expect(math).toMatch(`import("./${chunks[0]}")`);
+
+			// (preload) https://cdn.example.com/assets/math.d41e7373.css
+			expect(main).toMatch(`$w_s$("https://cdn.example.com/assets/${assets[1]}")`);
+
+			// HTML stylesheet: https://cdn.example.com/assets/index.0544f0a6.css
+			expect(html).toMatch(`href="https://cdn.example.com/assets/${assets[0]}"`);
+
+			// HTML script: https://cdn.example.com/assets/index.0544f0a6.css
+			expect(html).toMatch(`src="https://cdn.example.com/${roots[2]}"`);
 		});
 	});
 
 	describe('prerender', () => {
+		/**
+		 * @param {TestEnv} env
+		 * @param {string} f
+		 * @returns {Promise<string[]>}
+		 */
+		const readdir = async (env, f) => (await fs.readdir(path.join(env.tmp.path, f))).filter(f => f[0] !== '.');
+
 		it('should support prerendered HTML, title & meta tags', async () => {
 			await loadFixture('prod-head', env);
 			instance = await runWmr(env.tmp.path, 'build', '--prerender');
@@ -263,9 +309,7 @@ describe('production', () => {
 			console.info(instance.output.join('\n'));
 			expect(code).toBe(0);
 
-			const readdir = async f => (await fs.readdir(path.join(env.tmp.path, f))).filter(f => f[0] !== '.');
-
-			const pages = await readdir('dist');
+			const pages = await readdir(env, 'dist');
 
 			expect(pages).toContain('index.html');
 			expect(pages).toContain('other.html');
@@ -281,6 +325,18 @@ describe('production', () => {
 			expect(other).toMatch('<link rel="icon" href="data:,favicon-for-/other.html">');
 			expect(other).toMatch('<h1>page = /other.html</h1>');
 			expect(other).toMatch(`<meta property="og:title" content="Become an SEO Expert">`);
+		});
+
+		it('should support prerendering json', async () => {
+			await loadFixture('prod-prerender-json', env);
+			instance = await runWmr(env.tmp.path, 'build', '--prerender');
+			const code = await instance.done;
+			console.info(instance.output.join('\n'));
+			expect(code).toBe(0);
+
+			const indexHtml = path.join(env.tmp.path, 'dist', 'index.html');
+			const index = await fs.readFile(indexHtml, 'utf8');
+			expect(index).toMatch(/{"foo":42,"bar":"bar"}/);
 		});
 	});
 
@@ -318,8 +374,10 @@ describe('production', () => {
 
 			expect(logs).toEqual([
 				`hello from index.js`,
-				`hello from page one`,
-				`hello from page two`,
+				// Pages "one" and "two" are loaded in parallel. So we have no
+				// guarantee which one will be done loading first.
+				expect.stringMatching(/^hello from page (one|two)$/),
+				expect.stringMatching(/^hello from page (one|two)$/),
 				`loaded pages`,
 				`page one,page two`
 			]);

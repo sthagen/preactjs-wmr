@@ -1,10 +1,26 @@
 import path from 'path';
 import { promises as fs } from 'fs';
-import { setupTest, teardown, loadFixture, runWmrFast, getOutput, get } from './test-helpers.js';
+import {
+	setupTest,
+	teardown,
+	loadFixture,
+	runWmrFast,
+	getOutput,
+	get,
+	waitForMessage,
+	waitForNotMessage
+} from './test-helpers.js';
 import { rollup } from 'rollup';
 import nodeBuiltinsPlugin from '../src/plugins/node-builtins-plugin.js';
+import { supportsSearchParams } from '../src/lib/net-utils.js';
 
 jest.setTimeout(30000);
+
+async function updateFile(tempDir, file, replacer) {
+	const compPath = path.join(tempDir, file);
+	const content = await fs.readFile(compPath, 'utf-8');
+	await fs.writeFile(compPath, replacer(content));
+}
 
 describe('fixtures', () => {
 	/** @type {TestEnv} */
@@ -64,28 +80,28 @@ describe('fixtures', () => {
 		it('should print warning for missing index.html file in public dir', async () => {
 			await loadFixture('empty', env);
 			instance = await runWmrFast(env.tmp.path);
-			expect(instance.output.join('\n')).toMatch(`missing "index.html" file`);
+			await waitForMessage(instance.output, 'missing "index.html" file');
 			expect(await getOutput(env, instance)).toMatch(`Not Found`);
 		});
 
 		it('should print warning for missing index.html file (no public dir)', async () => {
 			await loadFixture('empty-nopublic', env);
 			instance = await runWmrFast(env.tmp.path);
-			expect(instance.output.join('\n')).toMatch(`missing "index.html" file`);
+			await waitForMessage(instance.output, 'missing "index.html" file');
 			expect(await getOutput(env, instance)).toMatch(`Not Found`);
 		});
 
 		it('should start successfully with only an HTML file in public dir', async () => {
 			await loadFixture('htmlonly', env);
 			instance = await runWmrFast(env.tmp.path);
-			expect(instance.output.join('\n')).not.toMatch(`missing an "index.html"`);
+			await waitForNotMessage(instance.output, `missing an "index.html"`);
 			expect(await getOutput(env, instance)).toMatch(`<h1>Hello wmr</h1>`);
 		});
 
 		it('should start successfully with only an HTML file (no public dir)', async () => {
 			await loadFixture('htmlonly-nopublic', env);
 			instance = await runWmrFast(env.tmp.path);
-			expect(instance.output.join('\n')).not.toMatch(`missing an "index.html"`);
+			await waitForNotMessage(instance.output, `missing an "index.html"`);
 			expect(await getOutput(env, instance)).toMatch(`<h1>Hello wmr</h1>`);
 		});
 	});
@@ -248,6 +264,41 @@ describe('fixtures', () => {
 			expect(text).toEqual('3');
 		});
 
+		it('should bubble up updates in non-accepted files with multiple parents', async () => {
+			await loadFixture('hmr', env);
+			instance = await runWmrFast(env.tmp.path);
+			await getOutput(env, instance);
+
+			let homeFoo = await env.page.$('#home-foo');
+			let rootFoo = await env.page.$('#root-foo');
+			let homeText = homeFoo ? await homeFoo.evaluate(el => el.textContent) : null;
+			let rootText = rootFoo ? await rootFoo.evaluate(el => el.textContent) : null;
+			expect(homeText).toEqual('42');
+			expect(rootText).toEqual('42');
+
+			await updateFile(env.tmp.path, 'store/index.js', content => content.replace('42', '43'));
+
+			await timeout(2000);
+
+			homeFoo = await env.page.$('#home-foo');
+			rootFoo = await env.page.$('#root-foo');
+			homeText = homeFoo ? await homeFoo.evaluate(el => el.textContent) : null;
+			rootText = rootFoo ? await rootFoo.evaluate(el => el.textContent) : null;
+			expect(homeText).toEqual('43');
+			expect(rootText).toEqual('43');
+
+			await updateFile(env.tmp.path, 'store/index.js', content => content.replace('43', '44'));
+
+			await timeout(2000);
+
+			homeFoo = await env.page.$('#home-foo');
+			rootFoo = await env.page.$('#root-foo');
+			homeText = homeFoo ? await homeFoo.evaluate(el => el.textContent) : null;
+			rootText = rootFoo ? await rootFoo.evaluate(el => el.textContent) : null;
+			expect(homeText).toEqual('44');
+			expect(rootText).toEqual('44');
+		});
+
 		it('should hot reload for a newly created file', async () => {
 			await loadFixture('hmr', env);
 			instance = await runWmrFast(env.tmp.path);
@@ -302,12 +353,6 @@ describe('fixtures', () => {
 	});
 
 	describe('hmr-scss', () => {
-		async function updateFile(tempDir, file, replacer) {
-			const compPath = path.join(tempDir, file);
-			const content = await fs.readFile(compPath, 'utf-8');
-			await fs.writeFile(compPath, replacer(content));
-		}
-
 		const timeout = n => new Promise(r => setTimeout(r, n));
 
 		it('should hot reload an scss-file imported from index.html', async () => {
@@ -482,6 +527,20 @@ describe('fixtures', () => {
 		});
 	});
 
+	describe('export-map', () => {
+		beforeEach(async () => {
+			await loadFixture('exports', env);
+			instance = await runWmrFast(env.tmp.path);
+			await env.page.goto(await instance.address);
+		});
+
+		it('should not pick node for a browser', async () => {
+			const test = await env.page.$('.test');
+			let text = test ? await test.evaluate(el => el.textContent) : null;
+			expect(text).toEqual('Browser implementation');
+		});
+	});
+
 	describe('package-exports', () => {
 		beforeEach(async () => {
 			await loadFixture('package-exports', env);
@@ -521,16 +580,133 @@ describe('fixtures', () => {
 				default: 'import'
 			});
 			expect(await env.page.evaluate(`import('/@npm/exports-fallbacks-defaultfirst')`)).toEqual({
-				default: 'import'
+				default: 'default'
 			});
 
 			// When import/module/browser isn't present (but a random other one is!), we fall back to require/default:
 			expect(await env.page.evaluate(`import('/@npm/exports-fallbacks-requirefallback')`)).toEqual({
-				default: 'require'
+				default: 'default'
 			});
 			expect(await env.page.evaluate(`import('/@npm/exports-fallbacks-defaultfallback')`)).toEqual({
 				default: 'default'
 			});
+		});
+	});
+
+	describe('config', () => {
+		it('should support loading node built-ins', async () => {
+			await loadFixture('config-node-builtins', env);
+			instance = await runWmrFast(env.tmp.path);
+
+			await waitForMessage(instance.output, /foo\/bar/);
+			await waitForMessage(instance.output, /plugin-A/);
+			expect(true).toEqual(true); // Silence linter
+		});
+
+		it('should restart server if config file changes', async () => {
+			if (!supportsSearchParams) return;
+
+			await loadFixture('config-reload', env);
+			instance = await runWmrFast(env.tmp.path);
+			await instance.address;
+			await waitForMessage(instance.output, 'watching for config changes');
+
+			// Trigger file change
+			await updateFile(env.tmp.path, 'wmr.config.mjs', content => content.replace(/foo/g, 'bar'));
+
+			await waitForMessage(instance.output, /restarting server/);
+			await waitForMessage(instance.output, /{ name: 'bar' }/);
+			expect(true).toEqual(true); // Silence linter
+		});
+
+		it('should restart server if .env file changes', async () => {
+			if (!supportsSearchParams) return;
+
+			await loadFixture('config-reload-env', env);
+			instance = await runWmrFast(env.tmp.path);
+			await instance.address;
+			await waitForMessage(instance.output, 'watching for config changes');
+
+			// Trigger file change
+			await updateFile(env.tmp.path, '.env', content => content.replace(/foo/g, 'bar'));
+
+			await waitForMessage(instance.output, /restarting server/);
+			await waitForMessage(instance.output, /{ FOO: 'bar' }/);
+			expect(true).toEqual(true); // Silence linter
+		});
+
+		it('should restart server if package.json file changes', async () => {
+			if (!supportsSearchParams) return;
+
+			await loadFixture('config-reload-package-json', env);
+			instance = await runWmrFast(env.tmp.path);
+			await instance.address;
+			await waitForMessage(instance.output, 'watching for config changes');
+
+			// Trigger file change
+			await updateFile(env.tmp.path, 'package.json', content => {
+				const json = JSON.parse(content);
+				json.alias = { foo: 'bar' };
+				return JSON.stringify(json);
+			});
+
+			await waitForMessage(instance.output, /restarting server/);
+			await waitForMessage(instance.output, /{ foo: 'bar' }/);
+			expect(true).toEqual(true); // Silence linter
+		});
+
+		it('should reconnect client on server restart', async () => {
+			if (!supportsSearchParams) return;
+
+			await loadFixture('config-reload-client', env);
+			instance = await runWmrFast(env.tmp.path);
+			await env.page.goto(await instance.address);
+			await waitForMessage(instance.output, 'watching for config changes');
+
+			const logs = [];
+			env.page.on('console', m => logs.push(m.text()));
+
+			// Trigger file change
+			await updateFile(env.tmp.path, 'wmr.config.mjs', content => content.replace(/foo/, 'bar'));
+			await waitForMessage(instance.output, /restarting server/);
+
+			await waitForMessage(logs, /Connected to server/i);
+
+			await updateFile(env.tmp.path, 'index.js', content => content.replace('Hello world', 'foo'));
+
+			await env.page.waitForFunction(() => {
+				const h1 = document.querySelector('h1');
+				if (!h1 || !h1.textContent) return false;
+				return h1.textContent.includes('foo');
+			});
+
+			expect(await env.page.content()).toMatch('foo 42');
+		});
+	});
+
+	describe('plugins', () => {
+		it('should order by plugin.enforce value', async () => {
+			await loadFixture('plugin-enforce', env);
+			instance = await runWmrFast(env.tmp.path);
+			await env.page.goto(await instance.address);
+			const text = await env.page.evaluate(`document.getElementById('app').textContent`);
+			expect(text).toEqual('file pre1 pre2 normal1 normal2 post1 post2');
+		});
+
+		it('should support config() and configResolved() hooks', async () => {
+			await loadFixture('plugin-config', env);
+			instance = await runWmrFast(env.tmp.path);
+			await env.page.goto(await instance.address);
+			expect(await env.page.evaluate(`fetch('/test').then(r => r.text())`)).toEqual('it works');
+			expect(await env.page.evaluate(`fetch('/test-resolved').then(r => r.text())`)).toEqual('it works');
+		});
+
+		it('should add middlewares via config', async () => {
+			await loadFixture('plugin-middlewares', env);
+			instance = await runWmrFast(env.tmp.path);
+			await env.page.goto(await instance.address);
+			const text = await env.page.evaluate(`fetch('/test').then(r => r.text())`);
+			expect(text).toEqual('it works');
 		});
 	});
 

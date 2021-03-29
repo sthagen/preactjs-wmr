@@ -1,16 +1,17 @@
 import { h, createContext, cloneElement } from 'preact';
 import { useContext, useMemo, useReducer, useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 
-const UPDATE = (state, url, push) => {
+const UPDATE = (state, url) => {
+	let push = true;
 	if (url && url.type === 'click') {
 		const link = url.target.closest('a[href]');
 		if (!link || link.origin != location.origin) return state;
 
 		url.preventDefault();
-		push = true;
 		url = link.href.replace(location.origin, '');
 	} else if (typeof url !== 'string') {
 		url = location.pathname + location.search;
+		push = undefined;
 	}
 
 	if (push === true) history.pushState(null, '', url);
@@ -19,8 +20,8 @@ const UPDATE = (state, url, push) => {
 };
 
 export const exec = (url, route, matches) => {
-	url = url.trim('/').split('/');
-	route = (route || '').trim('/').split('/');
+	url = url.split('/').filter(Boolean);
+	route = (route || '').split('/').filter(Boolean);
 	for (let i = 0, val; i < Math.max(url.length, route.length); i++) {
 		let [, m, param, flag] = (route[i] || '').match(/^(:?)(.*?)([+*?]?)$/);
 		val = url[i];
@@ -31,7 +32,7 @@ export const exec = (url, route, matches) => {
 		// field match:
 		matches[param] = val && decodeURIComponent(val);
 		// normal/optional field:
-		if (flag >= '?') continue;
+		if (flag >= '?' || flag === '') continue;
 		// rest (+/*) match:
 		matches[param] = url.slice(i).map(decodeURIComponent).join('/');
 		break;
@@ -134,6 +135,8 @@ Router.Provider = LocationProvider;
 
 LocationProvider.ctx = createContext(/** @type {{ url: string, path: string, query: object, route }} */ ({}));
 const RouteContext = createContext({});
+
+export const Route = props => h(props.component, props);
 
 export const useLocation = () => useContext(LocationProvider.ctx);
 export const useRoute = () => useContext(RouteContext);

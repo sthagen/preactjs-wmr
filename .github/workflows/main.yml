@@ -4,16 +4,30 @@ on:
   push:
     branches:
       - main
-    paths:
-      - packages/wmr/**
-      - packages/preact-iso/**
   pull_request:
-    paths:
-      - packages/wmr/**
-      - packages/preact-iso/**
+    branches:
+      - main
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      wmr: ${{ steps.filter.outputs.wmr }}
+      preact-iso: ${{ steps.filter.outputs.preact-iso }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            wmr:
+              - 'packages/wmr/**'
+              - 'examples/demo/**'
+            preact-iso:
+              - 'packages/preact-iso/**'
+
   build:
+    needs: changes
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -27,15 +41,21 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
       - name: Install
+        if: ${{ needs.changes.outputs.wmr == 'true' || needs.changes.outputs.preact-iso == 'true' }}
         run: yarn --frozen-lockfile
       - name: Build
+        if: ${{ needs.changes.outputs.wmr == 'true' }}
         run: yarn workspace wmr build
       - name: Test wmr
+        if: ${{ needs.changes.outputs.wmr == 'true' }}
         run: yarn workspace wmr test
       - name: Test preact-iso
+        if: ${{ needs.changes.outputs.preact-iso == 'true' }}
         run: yarn workspace preact-iso test
 
   lhci:
+    needs: changes
+    if: ${{ needs.changes.outputs.wmr == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -49,6 +69,6 @@ jobs:
       - name: Install
         run: yarn --frozen-lockfile
       - name: Build
-        run: yarn workspace wmr ci
+        run: yarn ci
       - name: LHCI
-        run: cd packages/wmr && lhci autorun --upload.target=temporary-public-storage --collect.url="http://localhost:8080" --collect.startServerCommand="npm run demo:serve" --upload.githubAppToken=${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+        run: lhci autorun --upload.target=temporary-public-storage --collect.url="http://localhost:8080" --collect.startServerCommand="yarn workspace @examples/demo serve" --collect.startServerReadyPattern="server running at" --upload.githubAppToken=${{ secrets.LHCI_GITHUB_APP_TOKEN }}
