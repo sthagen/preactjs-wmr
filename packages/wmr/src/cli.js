@@ -20,6 +20,7 @@ prog
 	.command('build', 'make a production build')
 	.option('--prerender', 'Pre-render the application to HTML')
 	.option('--sourcemap', 'Enable Source Maps')
+	.option('--visualize', 'Launch interactive bundle visualizer')
 	.action(opts => {
 		opts.minify = opts.minify !== false && !/false|0/.test(opts.minify);
 		run(build(opts));
@@ -53,12 +54,12 @@ prog.parse(process.argv);
 function run(p) {
 	p.catch(err => {
 		const text = err.message || err + '';
-		const stack =
-			errorstacks
-				.parseStackTrace(err.stack)
-				.map(frame => frame.raw)
-				.join('\n') + '\n';
-		process.stderr.write(`\n${kl.red(text)}\n${kl.dim(stack)}\n`);
+		const stack = errorstacks
+			.parseStackTrace(err.stack)
+			.map(frame => frame.raw)
+			.join('\n');
+
+		process.stderr.write(`\n${kl.red(text)}\n${stack ? kl.dim(stack + '\n\n') : ''}`);
 		process.exit(p.code || 1);
 	});
 }

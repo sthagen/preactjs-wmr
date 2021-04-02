@@ -24,6 +24,47 @@ describe('production', () => {
 		cleanup.length = 0;
 	});
 
+	it('should allow overwriting json loader', async () => {
+		await loadFixture('overwrite-loader-json', env);
+		instance = await runWmr(env.tmp.path, 'build');
+		const code = await instance.done;
+		const output = instance.output.join('\n');
+		console.log(output);
+
+		expect(code).toEqual(0);
+
+		const { address, stop } = serveStatic(path.join(env.tmp.path, 'dist'));
+		cleanup.push(stop);
+
+		await env.page.goto(address, {
+			waitUntil: ['networkidle0', 'load']
+		});
+
+		expect(await env.page.content()).toMatch(/foobarbaz/);
+	});
+
+	it('should allow overwriting url loader', async () => {
+		await loadFixture('overwrite-loader-url', env);
+		instance = await runWmr(env.tmp.path, 'build');
+		const code = await instance.done;
+		const output = instance.output.join('\n');
+		console.log(output);
+
+		expect(code).toEqual(0);
+
+		const { address, stop } = serveStatic(path.join(env.tmp.path, 'dist'));
+		cleanup.push(stop);
+
+		await env.page.goto(address, {
+			waitUntil: ['networkidle0', 'load']
+		});
+
+		const text = await env.page.content();
+		expect(text).toMatch(/my-url: \/assets\/foo\..*\.svg/);
+		expect(text).toMatch(/url: \/assets\/foo\..*\.svg/);
+		expect(text).toMatch(/fallback: \/assets\/foo\..*\.svg/);
+	});
+
 	describe('demo app', () => {
 		it('should serve the demo app', async () => {
 			await loadFixture('../../../../examples/demo', env);
@@ -337,6 +378,17 @@ describe('production', () => {
 			const indexHtml = path.join(env.tmp.path, 'dist', 'index.html');
 			const index = await fs.readFile(indexHtml, 'utf8');
 			expect(index).toMatch(/{"foo":42,"bar":"bar"}/);
+		});
+
+		it('should not crash during prerendering', async () => {
+			await loadFixture('prerender-crash', env);
+			instance = await runWmr(env.tmp.path, 'build', '--prerender');
+			const code = await instance.done;
+			console.info(instance.output.join('\n'));
+			expect(instance.output.join('\n')).toMatch(/Error: fail/);
+			// Check if stack trace is present
+			expect(instance.output.join('\n')).toMatch(/^\s+at\s\w+/gm);
+			expect(code).toBe(1);
 		});
 	});
 
