@@ -1,5 +1,7 @@
 import * as kl from 'kolorist';
 import { promises as fs } from 'fs';
+import path from 'path';
+import { rm } from './lib/fs-utils.js';
 import { bundleProd } from './bundler.js';
 import { bundleStats } from './lib/output-utils.js';
 import { prerender } from './lib/prerender.js';
@@ -9,7 +11,7 @@ import { setCwd } from './plugins/npm-plugin/registry.js';
 /**
  * @param {Parameters<bundleProd>[0] & { prerender?: boolean }} options
  */
-export default async function build(options = {}) {
+export default async function build(options) {
 	options.out = options.out || 'dist';
 
 	// @todo remove this hack once registry.js is instantiable
@@ -17,12 +19,14 @@ export default async function build(options = {}) {
 
 	options = await normalizeOptions(options, 'build');
 
-	await fs.rmdir(options.out, { recursive: true });
+	// Clears out the output folder without deleting it -- useful
+	// when mounted with Docker and the like
+	await Promise.all((await fs.readdir(options.out)).map(item => rm(path.join(options.out, item), { recursive: true })));
 
 	const bundleOutput = await bundleProd(options);
 
-	const stats = bundleStats(bundleOutput);
-	process.stdout.write(kl.bold(`Wrote ${stats.totalText} to disk:`) + stats.assetsText + '\n');
+	const stats = bundleStats(bundleOutput, path.relative(options.root, options.out));
+	process.stdout.write(kl.bold(`\nWrote ${stats.totalText} to disk:`) + stats.assetsText + '\n');
 
 	if (!options.prerender) return;
 

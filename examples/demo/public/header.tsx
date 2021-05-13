@@ -1,4 +1,4 @@
-import { useLocation } from 'preact-iso/router';
+import { useLocation } from 'preact-iso';
 
 export default function Header() {
 	const { url }: { url: string } = useLocation();
@@ -13,7 +13,9 @@ export default function Header() {
 				<a href="/files">Files</a>
 				<a href="/env">Env</a>
 				<a href="/json">JSON</a>
+				<a href="/alias-outside">Alias outside</a>
 				<a href="/error">Error</a>
+				<a href="/meta-tags">Meta-Tags</a>
 			</nav>
 			<label>
 				URL:

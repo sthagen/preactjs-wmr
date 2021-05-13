@@ -11,10 +11,11 @@
 	"dependencies": {
 		"preact": "^10.5.13",
 		"preact-iso": "*",
-		"preact-markup": "^2.1.1"
+		"preact-markup": "^2.1.1",
+		"hoofd": "^1.2.2"
 	},
 	"devDependencies": {
-		"@wmr-plugins/directory-import": "*",
+		"@wmrjs/directory-import": "*",
 		"if-env": "^1.0.4",
 		"marked": "^2.0.1",
 		"wmr": "*",

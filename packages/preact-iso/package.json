@@ -1,12 +1,13 @@
 {
 	"name": "preact-iso",
-	"version": "1.2.0",
+	"version": "2.0.2",
 	"description": "Isomorphic utilities for Preact",
 	"main": "./index.js",
 	"module": "./index.js",
 	"types": "./index.d.ts",
 	"type": "module",
 	"scripts": {
+		"test-build": "node --experimental-modules test/bundle-using-wmr.js",
 		"test": "node --experimental-vm-modules node_modules/.bin/jest"
 	},
 	"exports": {

@@ -1,4 +1,4 @@
-import { h, createContext, cloneElement } from 'preact';
+import { h, createContext, cloneElement, toChildArray } from 'preact';
 import { useContext, useMemo, useReducer, useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 
 let push;
@@ -32,6 +32,7 @@ const UPDATE = (state, url) => {
 export const exec = (url, route, matches) => {
 	url = url.split('/').filter(Boolean);
 	route = (route || '').split('/').filter(Boolean);
+	const params = matches.params || (matches.params = {});
 	for (let i = 0, val; i < Math.max(url.length, route.length); i++) {
 		let [, m, param, flag] = (route[i] || '').match(/^(:?)(.*?)([+*?]?)$/);
 		val = url[i];
@@ -40,7 +41,7 @@ export const exec = (url, route, matches) => {
 		// segment mismatch / missing required field:
 		if (!m || (!val && flag != '?' && flag != '*')) return;
 		// field match:
-		matches[param] = val && decodeURIComponent(val);
+		params[param] = val && decodeURIComponent(val);
 		// normal/optional field:
 		if (flag >= '?' || flag === '') continue;
 		// rest (+/*) match:
@@ -62,7 +63,7 @@ export function LocationProvider(props) {
 		return { url, path, query: Object.fromEntries(u.searchParams), route, wasPush };
 	}, [url]);
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		addEventListener('click', route);
 		addEventListener('popstate', route);
 
@@ -106,7 +107,7 @@ export function Router(props) {
 		prev.current = cur.current;
 
 		let p, d, m;
-		[].concat(props.children || []).some(vnode => {
+		toChildArray(props.children).some(vnode => {
 			const matches = exec(path, vnode.props.path, (m = { path, query }));
 			if (matches) return (p = cloneElement(vnode, m));
 			if (vnode.props.default) d = cloneElement(vnode, m);

@@ -1,8 +1,9 @@
 {
 	"name": "wmr",
-	"version": "1.6.0",
+	"version": "2.0.2",
 	"bin": "wmr.cjs",
 	"type": "module",
+	"main": "index.js",
 	"scripts": {
 		"build": "rollup -c",
 		"prepublishOnly": "yarn build",
@@ -10,13 +11,15 @@
 		"postpack": "mv -f .package.json package.json",
 		"test-e2e": "cross-env JEST_PUPPETEER_CONFIG=jest-puppeteer.config.cjs jest",
 		"test-prod": "cross-env PRODUCTION_BUILD=true JEST_PUPPETEER_CONFIG=jest-puppeteer.config.cjs jest",
-		"test": "eslint src test && npm run test-e2e"
+		"test": "eslint src test && npm run test-e2e",
+		"fixture": "node tools/run-fixture.js"
 	},
 	"author": "The Preact Authors (https://preactjs.com)",
 	"license": "MIT",
 	"repository": "preactjs/wmr",
 	"files": [
 		"wmr.cjs",
+		"index.js",
 		"types.d.ts",
 		"README.md"
 	],
@@ -143,10 +146,10 @@
 		"semver": "^7.3.2",
 		"simple-code-frame": "^1.1.1",
 		"sirv": "^1.0.6",
-		"stylis": "^4.0.2",
+		"stylis": "^4.0.10",
 		"sucrase": "^3.17.0",
 		"tar-stream": "^2.1.3",
-		"terser": "^4.8.0",
+		"terser": "^5.7.0",
 		"tmp-promise": "^3.0.2",
 		"totalist": "^1.1.0",
 		"utf-8-validate": "^5.0.2",

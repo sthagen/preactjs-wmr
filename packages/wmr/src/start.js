@@ -9,6 +9,7 @@ import { setCwd } from './plugins/npm-plugin/registry.js';
 import { formatBootMessage, debug } from './lib/output-utils.js';
 import { watch } from './lib/fs-watcher.js';
 import { injectWmr } from './lib/transform-html.js';
+import { parseStackTrace } from 'errorstacks';
 
 /**
  * @typedef OtherOptions
@@ -23,7 +24,7 @@ import { injectWmr } from './lib/transform-html.js';
 const deepCloneJSON = obj => JSON.parse(JSON.stringify(obj));
 
 /**
- * @param {Parameters<server>[0] & OtherOptions} options
+ * @param {Parameters<typeof server>[0] & OtherOptions} options
  */
 export default async function start(options = {}) {
 	// @todo remove this hack once registry.js is instantiable
@@ -93,7 +94,8 @@ async function bootServer(options, configWatchFiles) {
 			app.ws.broadcast({
 				type: 'error',
 				error: err.clientMessage || err.message,
-				codeFrame: kl.stripColors(err.codeFrame)
+				codeFrame: kl.stripColors(err.codeFrame),
+				stack: parseStackTrace(err.stack)
 			});
 		}
 	}
@@ -147,26 +149,27 @@ async function bootServer(options, configWatchFiles) {
 
 const injectWmrMiddleware = ({ cwd }) => {
 	return async (req, res, next) => {
+		// If we haven't intercepted the request it's safe to assume we need to inject wmr.
+		const path = posix.normalize(req.path);
+		if (/\.[a-z]+$/gi.test(path) || path.startsWith('/@npm')) {
+			return next();
+		}
+
 		try {
-			// If we haven't intercepted the request it's safe to assume we need to inject wmr.
-			const path = posix.normalize(req.path);
-			if (!/\.[a-z]+$/gi.test(path) && !path.startsWith('/@npm')) {
-				const start = Date.now();
-				const index = resolve(cwd, 'index.html');
-				const html = await fs.readFile(index, 'utf-8');
-				const result = await injectWmr(html);
-				const time = Date.now() - start;
-				res.writeHead(200, {
-					'Content-Type': 'text/html;charset=utf-8',
-					'Content-Length': Buffer.byteLength(result, 'utf-8'),
-					'Server-Timing': `index.html;dur=${time}`
-				});
-				res.end(result);
-			}
+			const start = Date.now();
+			const index = resolve(cwd, 'index.html');
+			const html = await fs.readFile(index, 'utf-8');
+			const result = await injectWmr(html);
+			const time = Date.now() - start;
+			res.writeHead(200, {
+				'Content-Type': 'text/html;charset=utf-8',
+				'Content-Length': Buffer.byteLength(result, 'utf-8'),
+				'Server-Timing': `index.html;dur=${time}`
+			});
+			res.end(result);
 		} catch (e) {
 			next();
 		}
-		next();
 	};
 };
 

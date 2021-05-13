@@ -1,5 +1,97 @@
 # wmr
 
+## 2.0.2
+
+### Patch Changes
+
+- [`a0024d5`](https://github.com/preactjs/wmr/commit/a0024d5297f8ec126ebad038fd5b9beccf74a5ba) [#607](https://github.com/preactjs/wmr/pull/607) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix flash of unstyled content (=FLOUT) by hoisting entry js CSS files into the HTML via a `<link>`-tag
+
+* [`08d66e3`](https://github.com/preactjs/wmr/commit/08d66e3799644a626af48208098bfa96959d7409) [#604](https://github.com/preactjs/wmr/pull/604) Thanks [@rschristian](https://github.com/rschristian)! - Ensuring .d.ts files aren't copied to build output
+
+- [`ba40f5c`](https://github.com/preactjs/wmr/commit/ba40f5c6c2056867dbbc3eb3def5102103a031b5) [#610](https://github.com/preactjs/wmr/pull/610) Thanks [@rschristian](https://github.com/rschristian)! - Fixes some of WMR's CLI flags labelled as global when they're not
+
+## 2.0.1
+
+### Patch Changes
+
+- [`0a9cbe8`](https://github.com/preactjs/wmr/commit/0a9cbe808f38aab10f15fb8f3e51cde8b3e37e37) [#596](https://github.com/preactjs/wmr/pull/596) Thanks [@rschristian](https://github.com/rschristian)! - WMR was published missing `"type": "module"` which immediately broke new projects due to the `wmr.config.mjs`
+
+## 2.0.0
+
+### Major Changes
+
+- [`7561dc7`](https://github.com/preactjs/wmr/commit/7561dc7b5f3e2604ef0bf51ec4b337633bfc70d7) [#576](https://github.com/preactjs/wmr/pull/576) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Rework prerendering API for tags in `document.head`. Previously the API is based on a subset of the actual `document.head` object. But in supplying a `document` global we rendered third party library checks invalid which usually use a variant of `typeof document === "undefined"` to determine if they're in a server environment or not. Since every library uses a different subset of the DOM API, it's impossible to support everyone. Instead using the server code paths of those libraries is a much more reliable approach.
+
+  Any tags that should land in `document.head` can be added to the return value of the `prerender` function:
+
+  ```js
+  export async function prerender(data) {
+  	// ...do your prerendering here
+
+  	return {
+  		// The string that is put inside <body>
+  		html: '<h1>Hello world</h1>',
+  		head: {
+  			// sets document.title
+  			title: 'My Cool Title',
+  			// Sets the lang attribute on the <html> element
+  			lang: 'en',
+  			// Any element you want to put into document.head
+  			elements: [
+  				{ type: 'link', props: { rel: 'stylesheet', href: '/path/to/my/style.css' } },
+  				{ type: 'meta', props: { property: 'og:title', content: 'Become an SEO Expert' } }
+  			]
+  		}
+  	};
+  }
+  ```
+
+### Minor Changes
+
+- [`c10f534`](https://github.com/preactjs/wmr/commit/c10f534880ce652166c1513af18261ceb591f971) [#585](https://github.com/preactjs/wmr/pull/585) Thanks [@JoviDeCroock](https://github.com/JoviDeCroock)! - Support injecting prerender data by returning a `data` key from the prerender function
+
+* [`bb77f83`](https://github.com/preactjs/wmr/commit/bb77f838404e69cfa4bf442761e7ae701908a41f) [#574](https://github.com/preactjs/wmr/pull/574) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Add --debug flag as an alternative to DEBUG=true. It's easier on windows to pass a flag than to set an environment variable
+
+- [`6e3bac1`](https://github.com/preactjs/wmr/commit/6e3bac1c0c2c696847275bcff7649edffc8d3ad0) [#529](https://github.com/preactjs/wmr/pull/529) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Add defineConfig helper for better intellisense in config files
+
+### Patch Changes
+
+- [`ba2e29f`](https://github.com/preactjs/wmr/commit/ba2e29f2d5b3fb1a91301c1bff4f2dfba37fb335) [#575](https://github.com/preactjs/wmr/pull/575) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Don't attempt to prerender external script urls
+
+* [`79496a3`](https://github.com/preactjs/wmr/commit/79496a30be7245bf3429a07cd9ffa8c151e0fdde) [#590](https://github.com/preactjs/wmr/pull/590) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix deeply nested CSS class not being hashed
+
+- [`480d3b5`](https://github.com/preactjs/wmr/commit/480d3b5f4f407dff415d8fa6ba6d28ec5e495e1e) [#578](https://github.com/preactjs/wmr/pull/578) Thanks [@rschristian](https://github.com/rschristian)! - Instead of deleting the build output folder, it is instead emptied, allowing references to it to remain intact.
+
+* [`01c4501`](https://github.com/preactjs/wmr/commit/01c4501a000fd256453d3d3b32a78d760fd2f2e7) [#569](https://github.com/preactjs/wmr/pull/569) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Allow plugins to pick any specifier for virtual modules
+
+## 1.7.0
+
+### Minor Changes
+
+- [`f892650`](https://github.com/preactjs/wmr/commit/f892650a084a95cfa21a23969d04fd63f374a7b7) [#549](https://github.com/preactjs/wmr/pull/549) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Render an error overlay into the page on build errors
+
+* [`f504d22`](https://github.com/preactjs/wmr/commit/f504d22019fcb3914efd3223f22983710c8cc288) [#562](https://github.com/preactjs/wmr/pull/562) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Add support for loading environment variables from `import.meta.env`
+
+### Patch Changes
+
+- [`d2cad4e`](https://github.com/preactjs/wmr/commit/d2cad4e0f5d1330e0cb0e9ae4b8a530080e483a8) [#565](https://github.com/preactjs/wmr/pull/565) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix missing build errors in terminal
+
+* [`d3c29ef`](https://github.com/preactjs/wmr/commit/d3c29efb15b20a642278e2582225eefe97bbc3ab) [#560](https://github.com/preactjs/wmr/pull/560) Thanks [@ForsakenHarmony](https://github.com/ForsakenHarmony)! - fix: don't forward to next after responding
+
+- [`51bea9c`](https://github.com/preactjs/wmr/commit/51bea9ce97d8de5ad81060736561f5ce6bcfe55b) [#561](https://github.com/preactjs/wmr/pull/561) Thanks [@ForsakenHarmony](https://github.com/ForsakenHarmony)! - chore: make cli easier to read and add uncaught exception handler
+
+* [`3c4c993`](https://github.com/preactjs/wmr/commit/3c4c993789ca060eab7ccf46a04f243d2e609f18) [#566](https://github.com/preactjs/wmr/pull/566) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix partially indented code frame on html warnings
+
+- [`18b8f00`](https://github.com/preactjs/wmr/commit/18b8f00923ddf578f2f747c35bd24a8039eee3ba) [#570](https://github.com/preactjs/wmr/pull/570) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix assets referenced in CSS not copied to outdir
+
+* [`e6ecd14`](https://github.com/preactjs/wmr/commit/e6ecd1447dfa136ea303bfe2068d5c894c32a7c6) [#573](https://github.com/preactjs/wmr/pull/573) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Throw an error when an entry file referenced in a script tag inside the HTML cannot be found
+
+- [`2ce4d36`](https://github.com/preactjs/wmr/commit/2ce4d366921f7e73b595b3de2243c274ad1a0fed) [#558](https://github.com/preactjs/wmr/pull/558) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix stale file content for entry files in watch mode
+
+* [`41010c3`](https://github.com/preactjs/wmr/commit/41010c3b97648e88794a03e64f43720213186718) [#572](https://github.com/preactjs/wmr/pull/572) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix missing generated files on cli output on build
+
+- [`152be6c`](https://github.com/preactjs/wmr/commit/152be6c682462aaf3f3c29deb269d38efd95d95d) [#568](https://github.com/preactjs/wmr/pull/568) Thanks [@developit](https://github.com/developit)! - Prevent `wmr build` from checking port availability
+
 ## 1.6.0
 
 ### Minor Changes

@@ -1,7 +1,7 @@
 import { promises as fs } from 'fs';
 import { resolve, join, dirname, relative, sep, posix } from 'path';
 import { transformHtml } from '../lib/transform-html.js';
-import { yellow, bgYellow, bgRed, dim, bold, white, black, magenta } from 'kolorist';
+import { yellow, bgYellow, bgRed, dim, bold, white, black, magenta, cyan } from 'kolorist';
 import { codeFrame } from '../lib/output-utils.js';
 
 /** @typedef {import('rollup').OutputAsset & { referencedFiles: string[], importedIds: string[] }} ExtendedAsset */
@@ -79,7 +79,7 @@ export default function htmlEntriesPlugin({ cwd, publicDir, publicPath } = {}) {
 								yellow(` <script src="${url}"> is missing type="module".\n`) +
 								white(`${dim('>')} Only module scripts are handled by WMR.\n`) +
 								white(dim('> ' + yellow(entryId) + ': ')) +
-								(frame ? white(frame) : '')
+								(frame ? '\n' + white(frame) : '')
 						);
 						return null;
 					}
@@ -140,6 +140,20 @@ export default function htmlEntriesPlugin({ cwd, publicDir, publicPath } = {}) {
 						`\n> ${white(`No module scripts were found in ${desc}.`)}` +
 						`\n> ${white(`Did you forget ${dim('<script')} ${magenta('type="module"')} ${dim('src="..">')} ?`)}\n`
 				);
+			}
+
+			// Check if referenced scripts actually exist
+			for (const script of opts.input) {
+				try {
+					await fs.readFile(script, 'utf-8');
+				} catch (err) {
+					this.error(
+						`\n${bgRed(white(bold(`ERROR`)))} File not found: ${cyan(script)}` +
+							`\n> ${white(
+								`Is the extension correct? ${dim('<script src="')}${magenta(relative(cwd, script))}${dim('">')} ?`
+							)}\n`
+					);
+				}
 			}
 		},
 

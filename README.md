@@ -35,7 +35,7 @@ or
 <strong><code>yarn create wmr your-project-name</code></strong>
 
 <p>
-<img width="400" src="https://user-images.githubusercontent.com/105127/100917537-4661e100-34a5-11eb-89bd-565b7bc31919.gif" alt="illustartion of installation to build for wmr">
+<img width="400" src="https://user-images.githubusercontent.com/105127/100917537-4661e100-34a5-11eb-89bd-565b7bc31919.gif" alt="illustration of installation to build for wmr">
 </p>
 
 > 💁 If you'd like ESLint to be set up for you, add `--eslint` to the command. _Note: this will use 150mb of disk space._
@@ -48,9 +48,9 @@ or
 | --- | :--- | :--- |
 | [wmr](packages/wmr) | Tiny all-in-one development tool for modern web apps | [![wmr npm](https://img.shields.io/npm/v/wmr.svg)](https://npm.im/wmr)
 | [create-wmr](packages/create-wmr) | Create a new WMR project in seconds | [![create-wmr npm](https://img.shields.io/npm/v/create-wmr.svg)](https://npm.im/create-wmr)
-| [@wmr-plugins/directory-import](packages/directory-plugin) | Import a directory's files as an Array | [![@wmr-plugins/directory-import npm](https://img.shields.io/npm/v/@wmr-plugins/directory-import.svg)](https://npm.im/@wmr-plugins/directory-import)
-| [@wmr-plugins/nomodule](packages/nomodule-plugin) | Generate legacy fallback bundles for older browsers | [![@wmr-plugins/nomodule npm](https://img.shields.io/npm/v/@wmr-plugins/nomodule.svg)](https://npm.im/@wmr-plugins/nomodule)
-| [@wmr-plugins/service-worker](packages/sw-plugin) | Bundle service workers | [![@wmr-plugins/service-worker npm](https://img.shields.io/npm/v/@wmr-plugins/service-worker.svg)](https://npm.im/@wmr-plugins/service-worker)
+| [@wmrjs/directory-import](packages/directory-plugin) | Import a directory's files as an Array | [![@wmrjs/directory-import npm](https://img.shields.io/npm/v/@wmrjs/directory-import.svg)](https://npm.im/@wmrjs/directory-import)
+| [@wmrjs/nomodule](packages/nomodule-plugin) | Generate legacy fallback bundles for older browsers | [![@wmrjs/nomodule npm](https://img.shields.io/npm/v/@wmrjs/nomodule.svg)](https://npm.im/@wmrjs/nomodule)
+| [@wmrjs/service-worker](packages/sw-plugin) | Bundle service workers | [![@wmrjs/service-worker npm](https://img.shields.io/npm/v/@wmrjs/service-worker.svg)](https://npm.im/@wmrjs/service-worker)
 | [preact-iso](packages/preact-iso) | Optimal code-splitting, hydration and routing for Preact | [![preact-iso npm](https://img.shields.io/npm/v/preact-iso.svg)](https://npm.im/preact-iso)
 
 ## Contributing
@@ -72,12 +72,12 @@ yarn workspace wmr build
 
 ### Adding a changeset
 
-Don't forget to also include a changeset, by runing this command at the root of the project:
+Don't forget to also include a changeset, by running this command at the root of the project:
 
 ```sh
 yarn changeset
 ```
 
-This will take you through a process of selecting the changed packages, the version updates and a description of the change. Aferwards, `changesets`, will generate a `.md` file inside a `.changeset` directory. Please commit that file as well.
+This will take you through a process of selecting the changed packages, the version updates and a description of the change. Afterwards, `changesets`, will generate a `.md` file inside a `.changeset` directory. Please commit that file as well.
 
 After all that, you are good to go. :+1

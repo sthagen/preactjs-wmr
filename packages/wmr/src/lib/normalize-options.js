@@ -1,9 +1,10 @@
 import { resolve, join } from 'path';
 import { promises as fs } from 'fs';
 import url from 'url';
+import { isFile, isDirectory } from './fs-utils.js';
 import { readEnvFiles } from './environment.js';
 import { compileSingleModule } from './compile-single-module.js';
-import { debug } from './output-utils.js';
+import { debug, setDebugCliArg } from './output-utils.js';
 import { getPort, supportsSearchParams } from './net-utils.js';
 
 /**
@@ -16,6 +17,8 @@ export async function normalizeOptions(options, mode, configWatchFiles = []) {
 	options.cwd = resolve(options.cwd || '');
 	process.chdir(options.cwd);
 
+	if (options.debug) setDebugCliArg(true);
+
 	options.root = options.cwd;
 
 	options.sourcemap = false;
@@ -24,6 +27,7 @@ export async function normalizeOptions(options, mode, configWatchFiles = []) {
 	options.output = [];
 	options.middleware = [];
 	options.features = { preact: true };
+	options.aliases = options.aliases || {};
 
 	// `wmr` / `wmr start` is a development command.
 	// `wmr build` / `wmr serve` are production commands.
@@ -59,7 +63,9 @@ export async function normalizeOptions(options, mode, configWatchFiles = []) {
 	}
 
 	options.host = process.env.HOST || options.host || 'localhost';
-	options.port = await getPort(options);
+	if (mode !== 'build') {
+		options.port = await getPort(options);
+	}
 
 	// If the CWD has a public/ directory, all files are assumed to be within it.
 	// From here, everything except node_modules and `out` are relative to public:
@@ -159,7 +165,7 @@ export async function normalizeOptions(options, mode, configWatchFiles = []) {
 
 	if (custom) {
 		if (custom.default) {
-			const res = await custom.default(options);
+			const res = typeof custom.default === 'function' ? await custom.default(options) : custom.default;
 			applyConfigResult(res);
 		}
 		if (custom[mode]) {
@@ -178,10 +184,26 @@ export async function normalizeOptions(options, mode, configWatchFiles = []) {
 		});
 	}
 
-	debug('wmr:config')(options);
-
 	await runConfigHook('config', options.plugins);
 	await runConfigHook('configResolved', options.plugins);
+
+	// Add src as a default alias if such a folder is present
+	if (!('src/*' in options.aliases)) {
+		const maybeSrc = resolve(options.root, 'src');
+		if (await isDirectory(maybeSrc)) {
+			options.aliases['src/*'] = maybeSrc;
+		}
+	}
+
+	// Resolve path-like aliases to absolute paths
+	for (const name in options.aliases) {
+		if (name.endsWith('/*')) {
+			const value = options.aliases[name];
+			options.aliases[name] = resolve(options.root, value);
+		}
+	}
+
+	debug('wmr:config')(options);
 
 	// @ts-ignore-next
 	return options;
@@ -216,18 +238,4 @@ function mergeConfig(a, b) {
 	}
 
 	return merged;
-}
-
-function isDirectory(path) {
-	return fs
-		.stat(path)
-		.then(s => s.isDirectory())
-		.catch(() => false);
-}
-
-function isFile(path) {
-	return fs
-		.stat(path)
-		.then(s => s.isFile())
-		.catch(() => false);
 }

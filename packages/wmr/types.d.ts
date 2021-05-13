@@ -45,6 +45,7 @@ declare module 'wmr' {
 		output: OutputOption[];
 		features: Features;
 		visualize: boolean;
+		debug: boolean;
 	}
 
 	export type BuildError = RollupError & { clientMessage?: string };
@@ -63,6 +64,10 @@ declare module 'wmr' {
 		/** @hidden Internal use only, don't use this */
 		onChange?: (event: ChangeEvent) => void;
 	}
+
+	export function defineConfig<
+		T extends Partial<Options> | ((options: Options) => void | Partial<Options> | Promise<void | Partial<Options>>)
+	>(options: T): T;
 }
 
 // Declarations used by WMR-based applications
@@ -73,6 +78,7 @@ declare interface ImportMeta {
 		invalidate(): void;
 		reject(): void;
 	};
+	env: Record<string, string>;
 }
 
 declare interface NodeModule {

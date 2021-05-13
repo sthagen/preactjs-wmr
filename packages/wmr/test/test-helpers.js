@@ -1,5 +1,6 @@
 import tmp from 'tmp-promise';
 import path from 'path';
+import { promises as fs } from 'fs';
 import ncpCb from 'ncp';
 import childProcess from 'child_process';
 import { promisify } from 'util';
@@ -49,7 +50,36 @@ export async function teardown(env) {
  */
 export async function loadFixture(name, env) {
 	const fixture = path.join(__dirname, 'fixtures', name);
+
+	// Ensure fixture name is included for parent alias tests
+	env.tmp.path = path.join(env.tmp.path, path.basename(name));
+	await fs.mkdir(env.tmp.path, { recursive: true });
+
 	await ncp(fixture, env.tmp.path);
+	try {
+		await fs.mkdir(path.join(env.tmp.path, 'node_modules', 'wmr'), { recursive: true });
+		await fs.mkdir(path.join(env.tmp.path, 'node_modules', '@wmrjs', 'directory-import', 'src'), { recursive: true });
+	} catch (err) {
+		if (!/EEXIST/.test(err.message)) {
+			throw err;
+		}
+	}
+
+	// Copy fake wmr node_modules over
+	await fs.copyFile(path.join(__dirname, '..', 'index.js'), path.join(env.tmp.path, 'node_modules', 'wmr', 'index.js'));
+	await fs.copyFile(
+		path.join(__dirname, '..', 'package.json'),
+		path.join(env.tmp.path, 'node_modules', 'wmr', 'package.json')
+	);
+
+	await fs.copyFile(
+		path.join(__dirname, '..', '..', 'directory-plugin', 'src', 'index.js'),
+		path.join(env.tmp.path, 'node_modules', '@wmrjs', 'directory-import', 'src', 'index.js')
+	);
+	await fs.copyFile(
+		path.join(__dirname, '..', '..', 'directory-plugin', 'package.json'),
+		path.join(env.tmp.path, 'node_modules', '@wmrjs', 'directory-import', 'package.json')
+	);
 }
 
 /**
@@ -127,7 +157,9 @@ export async function getOutput(env, instance) {
 		addrs.set(instance, address);
 	}
 
-	await env.page.goto(address);
+	await waitForPass(async () => {
+		await env.page.goto(address);
+	}, 5000);
 	return await env.page.content();
 }
 
@@ -141,6 +173,17 @@ const stripColors = str => str.replace(/\x1b\[(?:[0-9]{1,3}(?:;[0-9]{1,3})*)?[m|
 export const wait = ms => new Promise(r => setTimeout(r, ms));
 
 /**
+ * Pupppeteer often throws when the pages is navigated and we try
+ * to assert something. Ignore any errors when that happens.
+ * See: https://github.com/boxine/pentf/blob/c046f5275ae7201a427b9dc30965d633855bb3be/src/utils.js#L259
+ * @param {Error} err
+ * @returns {boolean}
+ */
+function ignoreError(err) {
+	return /Execution context was destroyed|(Session|Connection|Target) closed/.test(err.message);
+}
+
+/**
  * @param {() => boolean | Promise<boolean>} fn
  * @param {number} timeout
  * @returns {Promise<boolean>}
@@ -149,14 +192,47 @@ export async function waitFor(fn, timeout = 2000) {
 	const start = Date.now();
 
 	while (start + timeout >= Date.now()) {
-		const result = await fn();
-		if (result) return true;
+		try {
+			const result = await fn();
+			if (result) return true;
+		} catch (err) {
+			if (!ignoreError(err)) {
+				throw err;
+			}
+		}
 
 		// Wait a little before the next iteration
 		await wait(10);
 	}
 
 	return false;
+}
+
+/**
+ * Wait until a function doesn't throw anymmore
+ * @param {() => any} fn
+ * @param {number} timeout
+ * @returns {Promise<void>}
+ */
+export async function waitForPass(fn, timeout = 2000) {
+	const start = Date.now();
+
+	let error;
+	while (start + timeout >= Date.now()) {
+		try {
+			await fn();
+			return;
+		} catch (err) {
+			if (!ignoreError(err)) {
+				error = err;
+			}
+		}
+
+		// Wait a little before the next iteration
+		await wait(10);
+	}
+
+	throw error ? error : new Error(`waitForPass timed out. Waited ${timeout}ms`);
 }
 
 /**
@@ -198,6 +274,20 @@ export async function waitForNotMessage(haystack, message, timeout = 1000) {
 		await waitForMessage(haystack, message, timeout);
 		throw new Error(`Expected message to not be present: ${message}`);
 	} catch (err) {}
+}
+
+/**
+ * Print haystack when `fn` throws
+ * @param {string[]} haystack
+ * @param {() => any} fn
+ */
+export async function withLog(haystack, fn) {
+	try {
+		await fn();
+	} catch (err) {
+		console.log(haystack.join('\n'));
+		throw err;
+	}
 }
 
 /**
