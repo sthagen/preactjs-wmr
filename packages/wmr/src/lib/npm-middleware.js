@@ -6,7 +6,7 @@ import npmPlugin, { normalizeSpecifier } from '../plugins/npm-plugin/index.js';
 import { resolvePackageVersion, loadPackageFile } from '../plugins/npm-plugin/registry.js';
 import { getCachedBundle, setCachedBundle, sendCachedBundle, enqueueCompress } from './npm-middleware-cache.js';
 import processGlobalPlugin from '../plugins/process-global-plugin.js';
-import aliasesPlugin from '../plugins/aliases-plugin.js';
+import aliasPlugin from '../plugins/aliases-plugin.js';
 import { getMimeType } from './mimetypes.js';
 import nodeBuiltinsPlugin from '../plugins/node-builtins-plugin.js';
 import * as kl from 'kolorist';
@@ -36,12 +36,12 @@ async function handleAsset(meta, res) {
 /**
  * @param {object} [options]
  * @param {'npm'|'unpkg'} [options.source = 'npm'] How to fetch package files
- * @param {Record<string,string>} [options.aliases]
+ * @param {Record<string,string>} [options.alias]
  * @param {boolean} [options.optimize = true] Progressively minify and compress dependency bundles?
  * @param {string} [options.cwd] Virtual cwd
  * @returns {import('polka').Middleware}
  */
-export default function npmMiddleware({ source = 'npm', aliases, optimize, cwd } = {}) {
+export default function npmMiddleware({ source = 'npm', alias, optimize, cwd } = {}) {
 	return async (req, res, next) => {
 		// @ts-ignore
 		const mod = req.path.replace(/^\//, '');
@@ -70,6 +70,7 @@ export default function npmMiddleware({ source = 'npm', aliases, optimize, cwd }
 
 			res.setHeader('content-type', 'application/javascript;charset=utf-8');
 			if (hasDebugFlag()) {
+				// eslint-disable-next-line no-console
 				console.log(`  ${kl.dim('middleware:') + kl.bold(kl.magenta('npm'))}  ${JSON.stringify(meta.specifier)}`);
 			}
 			// serve from memory and disk caches:
@@ -77,7 +78,7 @@ export default function npmMiddleware({ source = 'npm', aliases, optimize, cwd }
 			if (cached) return sendCachedBundle(req, res, cached);
 
 			// const start = Date.now();
-			const code = await bundleNpmModule(mod, { source, aliases, cwd });
+			const code = await bundleNpmModule(mod, { source, alias, cwd });
 			// console.log(`Bundle dep: ${mod}: ${Date.now() - start}ms`);
 
 			// send it!
@@ -104,10 +105,10 @@ let npmCache;
  * @param {string} mod The module to bundle, including subpackage/path
  * @param {object} options
  * @param {'npm'|'unpkg'} [options.source]
- * @param {Record<string,string>} [options.aliases]
+ * @param {Record<string,string>} [options.alias]
  * @param {string} [options.cwd]
  */
-async function bundleNpmModule(mod, { source, aliases, cwd }) {
+async function bundleNpmModule(mod, { source, alias, cwd }) {
 	let npmProviderPlugin;
 
 	if (source === 'unpkg') {
@@ -133,7 +134,7 @@ async function bundleNpmModule(mod, { source, aliases, cwd }) {
 		preserveEntrySignatures: 'allow-extension',
 		plugins: [
 			nodeBuiltinsPlugin({}),
-			aliasesPlugin({ aliases, cwd }),
+			aliasPlugin({ alias, cwd }),
 			npmProviderPlugin,
 			processGlobalPlugin({
 				NODE_ENV: 'development'

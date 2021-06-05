@@ -47,6 +47,19 @@ describe('acorn-traverse', () => {
 			const generated = generate(ast);
 			expect(generated).toBe(source);
 		});
+
+		it('should remove JSXEmptyExpression', () => {
+			let str = generate(parse(`<A>{/* comment */}</A>;`)).trim();
+			expect(str).toMatchInlineSnapshot('"<A></A>;"');
+
+			str = generate(parse(`<A>{}</A>;`)).trim();
+			expect(str).toMatchInlineSnapshot('"<A></A>;"');
+		});
+
+		it('should serialize JSXMemberExpression', () => {
+			const str = generate(parse(`<a.b.c />`)).trim();
+			expect(str).toMatchInlineSnapshot('"<a.b.c/>;"');
+		});
 	});
 
 	describe('transform()', () => {
@@ -147,6 +160,42 @@ describe('acorn-traverse', () => {
 			expect(doTransformWithCompact(expression)).toMatchInlineSnapshot(`
 			"(
 				html\`<div>top</div><span>bottom</span>\`
+			);"
+			`);
+		});
+
+		it('should replace newlines with a space with compact option', () => {
+			const doTransform = code => transformWithPlugin(code, transformJsxToHtm);
+			const doTransformWithCompact = code =>
+				transformWithPlugin(code, transformJsxToHtm, { generatorOpts: { compact: true } });
+
+			const expression = dent`
+				(
+					<p>hello
+						world
+					<p>это
+
+						👩‍🚀</p>
+					</p>
+				);
+			`;
+
+			// Should keep the newlines formatting
+			expect(doTransform(expression)).toMatchInlineSnapshot(`
+			"(
+				html\`<p>hello
+					world
+				<p>это
+
+					👩‍🚀</p>
+				</p>\`
+			);"
+		`);
+
+			// Should remove the whitespaces between the HTM generated syntax
+			expect(doTransformWithCompact(expression)).toMatchInlineSnapshot(`
+			"(
+				html\`<p>hello world <p>это 👩‍🚀</p></p>\`
 			);"
 			`);
 		});

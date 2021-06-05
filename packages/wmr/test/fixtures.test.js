@@ -104,6 +104,14 @@ describe('fixtures', () => {
 		expect(text).toMatch('it works');
 	});
 
+	it('should prioritize extensionless import by extension array', async () => {
+		await loadFixture('import-priority', env);
+		instance = await runWmrFast(env.tmp.path);
+		const text = await getOutput(env, instance);
+
+		expect(text).toMatch('foo.ts');
+	});
+
 	describe('empty', () => {
 		it('should print warning for missing index.html file in public dir', async () => {
 			await loadFixture('empty', env);
@@ -191,6 +199,20 @@ describe('fixtures', () => {
 			expect(await env.page.evaluate(`window.ReactDOM === window.preactCompat`)).toBe(true);
 		});
 
+		it('should warn when .aliases instead of .alias is found in config', async () => {
+			await loadFixture('alias-deprecated', env);
+			instance = await runWmrFast(env.tmp.path);
+			const output = await getOutput(env, instance);
+
+			await withLog(instance.output, async () => {
+				expect(output).toMatch(/preact was used to render/);
+				expect(await env.page.evaluate(`window.React === window.preactCompat`)).toBe(true);
+				expect(await env.page.evaluate(`window.ReactDOM === window.preactCompat`)).toBe(true);
+
+				expect(instance.output.join('\n')).toMatch(/Please switch to "alias"/);
+			});
+		});
+
 		it('should allow directory aliasing outside of cwd', async () => {
 			await loadFixture('alias-outside', env);
 			instance = await runWmrFast(env.tmp.path);
@@ -219,6 +241,15 @@ describe('fixtures', () => {
 
 		it('should alias <project>/src/ by default', async () => {
 			await loadFixture('alias-src', env);
+			instance = await runWmrFast(env.tmp.path);
+			await withLog(instance.output, async () => {
+				const output = await getOutput(env, instance);
+				expect(output).toMatch(/it works/);
+			});
+		});
+
+		it('should not add <project>/src/ alias if that is our cwd', async () => {
+			await loadFixture('alias-src-public', env);
 			instance = await runWmrFast(env.tmp.path);
 			await withLog(instance.output, async () => {
 				const output = await getOutput(env, instance);
@@ -337,8 +368,10 @@ describe('fixtures', () => {
 			await loadFixture('css-imports', env);
 			instance = await runWmrFast(env.tmp.path);
 			await getOutput(env, instance);
-			console.log(instance.output);
-			expect(await env.page.$eval('h1', el => getComputedStyle(el).color)).toBe('rgb(255, 0, 0)');
+
+			await withLog(instance.output, async () => {
+				expect(await env.page.$eval('h1', el => getComputedStyle(el).color)).toBe('rgb(255, 0, 0)');
+			});
 		});
 
 		it('should load referenced files via url()', async () => {
@@ -346,6 +379,21 @@ describe('fixtures', () => {
 			instance = await runWmrFast(env.tmp.path);
 			await getOutput(env, instance);
 			expect(await env.page.$eval('body', el => getComputedStyle(el).background)).toMatch(/img\.jpg/);
+		});
+
+		it('should warn on CSS modules with reserved class names', async () => {
+			await loadFixture('css-module-reserved', env);
+			instance = await runWmrFast(env.tmp.path);
+			await getOutput(env, instance);
+
+			await waitForPass(async () => {
+				expect(await env.page.$eval('.foo', el => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 218, 185)');
+				expect(await env.page.$eval('.new', el => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 255, 0)');
+				expect(await env.page.$eval('.debugger', el => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 0, 0)');
+				expect(await env.page.$eval('.const', el => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 218, 185)');
+			});
+
+			expect(instance.output.join('\n')).toMatch(/Cannot use reserved word/);
 		});
 	});
 
@@ -646,6 +694,20 @@ describe('fixtures', () => {
 			const output = await getOutput(env, instance);
 			expect(output).toMatch(/development/i);
 		});
+
+		it('should contain all env variables starting with WMR_', async () => {
+			await loadFixture('env-vars', env);
+			instance = await runWmrFast(env.tmp.path, {
+				env: {
+					FOO: 'fail',
+					WMR_FOO: 'foo',
+					WMR_BAR: 'bar'
+				}
+			});
+			const output = await getOutput(env, instance);
+			expect(output).not.toMatch(/fail/i);
+			expect(output).toMatch(/foo bar/i);
+		});
 	});
 
 	describe('json', () => {
@@ -841,9 +903,41 @@ describe('fixtures', () => {
 
 			expect(await env.page.content()).toMatch('foo 42');
 		});
+
+		it('should support TypeScript with CJS module type', async () => {
+			await loadFixture('config-typescript-cjs', env);
+			instance = await runWmrFast(env.tmp.path);
+
+			await waitForMessage(instance.output, /foo/);
+
+			const files = await fs.readdir(env.tmp.path);
+			expect(files).not.toContain('wmr.config.js');
+		});
+
+		it('should only load TypeScript config', async () => {
+			await loadFixture('config-multiple', env);
+			instance = await runWmrFast(env.tmp.path);
+
+			await waitForMessage(instance.output, /plugin-ts/);
+			expect(true).toEqual(true); // Silence linter
+		});
 	});
 
 	describe('plugins', () => {
+		it("should preserve './' for relative specifiers", async () => {
+			await loadFixture('plugin-resolve', env);
+			instance = await runWmrFast(env.tmp.path);
+			const output = await getOutput(env, instance);
+			expect(output).toMatch(/Resolved: \.\/foo\.js/);
+		});
+
+		it("should preserve './' for relative specifiers with prefixes", async () => {
+			await loadFixture('plugin-resolve-prefix', env);
+			instance = await runWmrFast(env.tmp.path);
+			const output = await getOutput(env, instance);
+			expect(output).toMatch(/Resolved: url:\.\/foo\.js/);
+		});
+
 		it('should order by plugin.enforce value', async () => {
 			await loadFixture('plugin-enforce', env);
 			instance = await runWmrFast(env.tmp.path);

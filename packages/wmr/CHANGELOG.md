@@ -1,5 +1,90 @@
 # wmr
 
+## 2.2.2
+
+### Patch Changes
+
+- [`8c05814`](https://github.com/preactjs/wmr/commit/8c0581495f2713c98a134bc168139a8562237d96) [#658](https://github.com/preactjs/wmr/pull/658) Thanks [@rschristian](https://github.com/rschristian)! - Removes debug log
+
+## 2.2.1
+
+### Patch Changes
+
+- [`95da598`](https://github.com/preactjs/wmr/commit/95da598ecdd8f8e673b12993b174877cf0b4e727) [#643](https://github.com/preactjs/wmr/pull/643) Thanks [@developit](https://github.com/developit)! - Never copy `wmr.config.js` to output directory
+
+* [`6a9869f`](https://github.com/preactjs/wmr/commit/6a9869f66e3444af419697e91b24a610435f3729) [#656](https://github.com/preactjs/wmr/pull/656) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix unable to code generate JSXMemberExpression and JSXEmptyExpression nodes
+
+- [`7345e89`](https://github.com/preactjs/wmr/commit/7345e893e21c318738549e7d1c5fe92b30321afe) [#648](https://github.com/preactjs/wmr/pull/648) Thanks [@lukeed](https://github.com/lukeed)! - fix(compression): ensure all responses write headers
+
+* [`df93873`](https://github.com/preactjs/wmr/commit/df93873b6c2036bdc120f47e22a69dbe139c0341) [#635](https://github.com/preactjs/wmr/pull/635) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix `./` not preserved during development for `resolveId()` plugin hook
+
+- [`c03abcc`](https://github.com/preactjs/wmr/commit/c03abcc36c26dc936af8701ab9031ddff44995a5) [#650](https://github.com/preactjs/wmr/pull/650) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Prioritize extension resolution for extensionless imports.
+
+* [`ccdc04d`](https://github.com/preactjs/wmr/commit/ccdc04d81272c764172453417c4291675459af62) [#641](https://github.com/preactjs/wmr/pull/641) Thanks [@developit](https://github.com/developit)! - Print warning when CSS Module mappings contain invalid identifiers
+
+- [`fe4b9cb`](https://github.com/preactjs/wmr/commit/fe4b9cbea62f88de74bb59472b349d2e4969a212) [#649](https://github.com/preactjs/wmr/pull/649) Thanks [@leader22](https://github.com/leader22)! - Do not inject `<link rel=stylesheet>` when there is no stylesheet.
+
+## 2.2.0
+
+### Minor Changes
+
+- [`9d5b381`](https://github.com/preactjs/wmr/commit/9d5b381aa2b161e82eb6bec1fc115a4fcc37c013) [#627](https://github.com/preactjs/wmr/pull/627) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Add support for loading environment variables starting with `WMR_` by default.
+
+### Patch Changes
+
+- [`c177752`](https://github.com/preactjs/wmr/commit/c1777522cbc677b2712e89d9d646690e07e1e19e) [#634](https://github.com/preactjs/wmr/pull/634) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix stray js config file when compiled with TypeScript
+
+* [`cf6e5ce`](https://github.com/preactjs/wmr/commit/cf6e5ce5edfcac0427ddeb8d3949b79eecc356d7) [#633](https://github.com/preactjs/wmr/pull/633) Thanks [@cristianbote](https://github.com/cristianbote)! - Adapt the newline regex rule to match any character range so unicode or other forms of chars chan be matched.
+
+- [`352a5ef`](https://github.com/preactjs/wmr/commit/352a5ef6ac27ee8203f7f294b3b4e3a5b3b15ffc) [#636](https://github.com/preactjs/wmr/pull/636) Thanks [@rschristian](https://github.com/rschristian)! - Fixes the debug flag/messages for optimize-graph-plugin
+
+* [`6d525e4`](https://github.com/preactjs/wmr/commit/6d525e4b3b5e558a8839fd3fe0076494422bdad4) [#631](https://github.com/preactjs/wmr/pull/631) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix unable to start when multiple config files in different formats are present.
+
+- [`f1d41fe`](https://github.com/preactjs/wmr/commit/f1d41fe68c364a0201361e91289fd8f65665e540) [#625](https://github.com/preactjs/wmr/pull/625) Thanks [@rschristian](https://github.com/rschristian)! - Ensures TS wmr.config files are handled first
+
+* [`93c93e9`](https://github.com/preactjs/wmr/commit/93c93e9b01eb7ebab2d7b4553a3f658e91872a3e) [#623](https://github.com/preactjs/wmr/pull/623) Thanks [@rschristian](https://github.com/rschristian)! - WMR now transpiles wmr.config.ts to the correct module type for the app
+
+- [`f9fcfe0`](https://github.com/preactjs/wmr/commit/f9fcfe0b725a5fddca2e5162eb408db01852768c) [#628](https://github.com/preactjs/wmr/pull/628) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Ensure options.cwd is correct after plugin passes
+
+* [`8bbf3d0`](https://github.com/preactjs/wmr/commit/8bbf3d01722c17dda2d239b6b4e9f300a37f7122) [#624](https://github.com/preactjs/wmr/pull/624) Thanks [@rschristian](https://github.com/rschristian)! - Fixes bad id reassignment in case of wmr.config.ts
+
+## 2.1.0
+
+### Minor Changes
+
+- [`10df8bb`](https://github.com/preactjs/wmr/commit/10df8bb7a3266f537f3e5742d2d8e85faa7962ac) [#619](https://github.com/preactjs/wmr/pull/619) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Deprecate "aliases" configuration in favor of "alias" to have a consistent name across various frontend tools. The "aliases" property will continue to work, but a deprecation warning will be printed to the console.
+
+  ```diff
+  export default {
+  -	aliases: {
+  +	alias: {
+  		react: 'preact/compat'
+  	}
+  };
+  ```
+
+* [`d907131`](https://github.com/preactjs/wmr/commit/d907131b43898e65872e3c4190456bc89b4fe58d) [#552](https://github.com/preactjs/wmr/pull/552) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Add support for importing files outside of the main public directory. This feature is based on aliases and `<project>/src` is added by default. To prevent unexpected file access only the directories defined in the aliases and the public directory are allowed to read files from. To alias a new path add the following to your WMR configuration file:
+
+  ```js
+  // File: wmr.config.mjs
+  import { defineConfig } from 'wmr';
+
+  export default defineConfig({
+  	alias: {
+  		// This will alias "~" to "<project>/src/components/"
+  		'~/': './src/components/'
+  	}
+  });
+  ```
+
+### Patch Changes
+
+- [`7e3c2a7`](https://github.com/preactjs/wmr/commit/7e3c2a743071d7a2f93a4a48e65f612758eedd5c) [#622](https://github.com/preactjs/wmr/pull/622) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix missing whitespace when JSXText spans multiple lines in prod
+
+* [`36b927f`](https://github.com/preactjs/wmr/commit/36b927f7900543cdd6602cde00f307cb91f7cd57) [#612](https://github.com/preactjs/wmr/pull/612) Thanks [@developit](https://github.com/developit)! - Upgrade to Terser 5
+
+- [`33a0fd7`](https://github.com/preactjs/wmr/commit/33a0fd7827d1197d9d32946360e73c6fd7fcf28d) [#620](https://github.com/preactjs/wmr/pull/620) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Don't add default `src/*` path mapping if we're using it as our public directory already.
+
 ## 2.0.2
 
 ### Patch Changes

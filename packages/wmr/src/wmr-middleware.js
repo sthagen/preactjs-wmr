@@ -32,7 +32,7 @@ export const moduleGraph = new Map();
  * @returns {import('polka').Middleware}
  */
 export default function wmrMiddleware(options) {
-	let { cwd, root, out, distDir = 'dist', onError, onChange = NOOP, aliases } = options;
+	let { cwd, root, out, distDir = 'dist', onError, onChange = NOOP, alias } = options;
 
 	distDir = resolve(dirname(out), distDir);
 
@@ -50,9 +50,9 @@ export default function wmrMiddleware(options) {
 	NonRollup.buildStart();
 
 	// Make watcher aware of aliased directories
-	const pathAliases = Object.keys(aliases)
+	const pathAliases = Object.keys(alias)
 		.filter(key => key.endsWith('/*'))
-		.map(key => aliases[key]);
+		.map(key => alias[key]);
 	const watchDirs = [cwd, resolve(root, 'package.json'), ...pathAliases];
 	logWatcher(`watching:\n${watchDirs.map(d => kl.dim('- ' + d)).join('\n')}`);
 
@@ -108,7 +108,7 @@ export default function wmrMiddleware(options) {
 		NonRollup.watchChange(absolute);
 
 		// Resolve potentially aliased paths and normalize to 'nix:
-		const aliased = matchAlias(aliases, absolute.split(sep).join(posix.sep));
+		const aliased = matchAlias(alias, absolute.split(sep).join(posix.sep));
 		filename = aliased
 			? // Trim leading slash, we need a relative path for the cache
 			  aliased.slice(1)
@@ -175,12 +175,18 @@ export default function wmrMiddleware(options) {
 			id = posix.normalize(path.slice('/@alias/'.length));
 
 			// Resolve to a file here for non-js Transforms
-			file = resolveAlias(options.aliases, id);
+			file = resolveAlias(options.alias, id);
 		} else {
 			const prefixMatches = path.match(/^\/?@([a-z-]+)(\/.+)$/);
 			if (prefixMatches) {
 				prefix = '\0' + prefixMatches[1] + ':';
 				path = prefixMatches[2];
+			}
+
+			if (path.startsWith('/@id/')) {
+				// Virtual paths have no exact file match, so we don't set `file`
+				hasIdPrefix = true;
+				path = path.slice('/@id'.length);
 			}
 
 			// convert to OS path:
@@ -191,12 +197,16 @@ export default function wmrMiddleware(options) {
 			// Rollup-style CWD-relative Unix-normalized path "id":
 			id = relative(cwd, file).replace(/^\.\//, '').replace(/^[\0]/, '').split(sep).join(posix.sep);
 
+			// TODO: Vefify prefix mappings in write cache
+			cacheKey = prefix + id;
+
+			if (!hasIdPrefix) {
+				id = `./${id}`;
+			}
+
 			// add back any prefix if there was one:
 			file = prefix + file;
 			id = prefix + id;
-
-			// TODO: Vefify prefix mappings in write cache
-			cacheKey = id;
 		}
 
 		let type = getMimeType(file);
@@ -236,7 +246,7 @@ export default function wmrMiddleware(options) {
 				cwd,
 				out,
 				NonRollup,
-				aliases: options.aliases,
+				alias: options.alias,
 				cacheKey
 			});
 
@@ -273,10 +283,10 @@ export default function wmrMiddleware(options) {
  *
  * @param {string} file Path to file to load
  * @param {string} cwd
- * @param {Record<string, string>} aliases
+ * @param {Record<string, string>} alias
  * @returns
  */
-function resolveFile(file, cwd, aliases) {
+function resolveFile(file, cwd, alias) {
 	// Probably an error if we ar enot called with an absolute path
 	if (!isAbsolute(file)) {
 		throw new Error(`Expected absolute path but got: ${file}`);
@@ -299,8 +309,8 @@ function resolveFile(file, cwd, aliases) {
 		// TODO: Better to precompute this in normalizeOptions?
 		const includeDirs = [cwd];
 		// File is not in cwd, but might still be in an aliased directory
-		for (const alias in aliases) {
-			const value = aliases[alias];
+		for (const name in alias) {
+			const value = alias[name];
 
 			if (isAbsolute(value)) {
 				includeDirs.push(value);
@@ -329,7 +339,7 @@ function resolveFile(file, cwd, aliases) {
  * @property {string} prefix a Rollup plugin -style path `\0prefix:`, if the URL was `/＠prefix/*`
  * @property {string} cwd working directory, including ./public if detected
  * @property {string} out output directory
- * @property {Record<string, string>} aliases
+ * @property {Record<string, string>} alias
  * @property {string} cacheKey Key for write cache
  * @property {InstanceType<import('http')['IncomingMessage']>} req HTTP Request object
  * @property {InstanceType<import('http')['ServerResponse']>} res HTTP Response object
@@ -373,7 +383,7 @@ export const TRANSFORMS = {
 	},
 
 	// Handle individual JavaScript modules
-	async js({ id, file, prefix, res, cwd, out, NonRollup, req, aliases, cacheKey }) {
+	async js({ id, file, prefix, res, cwd, out, NonRollup, req, alias, cacheKey }) {
 		let code;
 		try {
 			res.setHeader('Content-Type', 'application/javascript;charset=utf-8');
@@ -395,7 +405,7 @@ export const TRANSFORMS = {
 				if (prefix) file = file.replace(prefix, '');
 				file = file.split(posix.sep).join(sep);
 				if (!isAbsolute(file)) file = resolve(cwd, file);
-				code = await fs.readFile(resolveFile(file, cwd, aliases), 'utf-8');
+				code = await fs.readFile(resolveFile(file, cwd, alias), 'utf-8');
 			}
 
 			code = await NonRollup.transform(code, id);
@@ -410,7 +420,7 @@ export const TRANSFORMS = {
 						logJsTransform(`${kl.cyan(formatPath(spec))} [external]`);
 						return spec;
 					}
-					let graphId = importer.startsWith('/') ? importer.slice(1) : importer;
+					let graphId = importer.replace(/^\.?\.?\//, '');
 					if (!moduleGraph.has(graphId)) {
 						moduleGraph.set(graphId, { dependencies: new Set(), dependents: new Set(), acceptingUpdates: false });
 					}
@@ -446,6 +456,11 @@ export const TRANSFORMS = {
 						if (spec[0] === '/' || spec[0] === sep) {
 							spec = relative(cwd, spec).split(sep).join(posix.sep);
 						}
+						// Retain bare specifiers when serializing to url
+						else if (!/^\.?\.\//.test(spec)) {
+							spec = `@id/${spec}`;
+						}
+
 						return '/@' + prefix + '/' + spec;
 					});
 
@@ -454,13 +469,13 @@ export const TRANSFORMS = {
 
 					// If file resolves outside of root it may be an aliased path.
 					if (spec.startsWith('.')) {
-						const aliased = matchAlias(aliases, posix.resolve(posix.dirname(file), spec));
+						const aliased = matchAlias(alias, posix.resolve(posix.dirname(file), spec));
 						if (aliased) spec = aliased;
 					}
 
 					if (!spec.startsWith('/@alias/') && !/^\0?\.?\.?[/\\]/.test(spec)) {
 						// Check if the spec is an alias
-						const aliased = matchAlias(aliases, spec);
+						const aliased = matchAlias(alias, spec);
 						if (aliased) spec = aliased;
 
 						if (!spec.startsWith('/@alias/')) {
@@ -490,7 +505,7 @@ export const TRANSFORMS = {
 						}
 					}
 
-					const modSpec = spec.startsWith('../') ? spec.replace(/..\/g/, '') : spec.replace('./', '');
+					const modSpec = spec.replace(/^\.?\.\//, '');
 					mod.dependencies.add(modSpec);
 					if (!moduleGraph.has(modSpec)) {
 						moduleGraph.set(modSpec, { dependencies: new Set(), dependents: new Set(), acceptingUpdates: false });
@@ -522,7 +537,7 @@ export const TRANSFORMS = {
 		}
 	},
 	// Handles "CSS Modules" proxy modules (style.module.css.js)
-	async cssModule({ id, file, cwd, out, res, aliases, cacheKey }) {
+	async cssModule({ id, file, cwd, out, res, alias, cacheKey }) {
 		res.setHeader('Content-Type', 'application/javascript;charset=utf-8');
 
 		// Cache the generated mapping/proxy module with a .js extension (the CSS itself is also cached)
@@ -532,7 +547,7 @@ export const TRANSFORMS = {
 
 		// We create a plugin container for each request to prevent asset referenceId clashes
 		const container = createPluginContainer(
-			[wmrPlugin({ hot: true }), sassPlugin(), wmrStylesPlugin({ cwd, hot: true, fullPath: true, aliases })],
+			[wmrPlugin({ hot: true }), sassPlugin(), wmrStylesPlugin({ cwd, hot: true, fullPath: true, alias })],
 			{
 				cwd,
 				output: {
@@ -545,7 +560,7 @@ export const TRANSFORMS = {
 			}
 		);
 
-		const result = (await container.load(file)) || (await fs.readFile(resolveFile(file, cwd, aliases), 'utf-8'));
+		const result = (await container.load(file)) || (await fs.readFile(resolveFile(file, cwd, alias), 'utf-8'));
 
 		let code = typeof result === 'string' ? result : result && result.code;
 
@@ -568,7 +583,7 @@ export const TRANSFORMS = {
 	},
 
 	// Handles CSS Modules (the actual CSS)
-	async css({ id, path, file, cwd, out, res, aliases, cacheKey }) {
+	async css({ id, path, file, cwd, out, res, alias, cacheKey }) {
 		if (!/\.(css|s[ac]ss)$/.test(path)) throw null;
 
 		const isModular = /\.module\.(css|s[ac]ss)$/.test(path);
@@ -579,11 +594,11 @@ export const TRANSFORMS = {
 
 		if (WRITE_CACHE.has(id)) return WRITE_CACHE.get(id);
 
-		const idAbsolute = resolveFile(file, cwd, aliases);
+		const idAbsolute = resolveFile(file, cwd, alias);
 		let code = await fs.readFile(idAbsolute, 'utf-8');
 
 		if (isModular) {
-			code = await modularizeCss(code, id, undefined, idAbsolute);
+			code = await modularizeCss(code, id.replace(/^\.\//, ''), undefined, idAbsolute);
 		} else if (isSass) {
 			code = processSass(code);
 		}

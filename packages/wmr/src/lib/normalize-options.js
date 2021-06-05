@@ -2,9 +2,9 @@ import { resolve, join } from 'path';
 import { promises as fs } from 'fs';
 import url from 'url';
 import { isFile, isDirectory } from './fs-utils.js';
-import { readEnvFiles } from './environment.js';
+import { getWmrEnvVars, readEnvFiles } from './environment.js';
 import { compileSingleModule } from './compile-single-module.js';
-import { debug, setDebugCliArg } from './output-utils.js';
+import { debug, deprecated, setDebugCliArg } from './output-utils.js';
 import { getPort, supportsSearchParams } from './net-utils.js';
 
 /**
@@ -27,7 +27,7 @@ export async function normalizeOptions(options, mode, configWatchFiles = []) {
 	options.output = [];
 	options.middleware = [];
 	options.features = { preact: true };
-	options.aliases = options.aliases || {};
+	options.alias = options.alias || options.aliases || {};
 
 	// `wmr` / `wmr start` is a development command.
 	// `wmr build` / `wmr serve` are production commands.
@@ -36,11 +36,15 @@ export async function normalizeOptions(options, mode, configWatchFiles = []) {
 	options.mode = mode;
 
 	const NODE_ENV = process.env.NODE_ENV || (prod ? 'production' : 'development');
-	options.env = await readEnvFiles(
+	const envFileVars = await readEnvFiles(
 		options.root,
 		['.env', '.env.local', `.env.${NODE_ENV}`, `.env.${NODE_ENV}.local`],
 		configWatchFiles
 	);
+	options.env = {
+		...getWmrEnvVars(),
+		...envFileVars
+	};
 
 	// Output directory is relative to CWD *before* ./public is detected + appended:
 	options.out = resolve(options.cwd, options.out || '.cache');
@@ -67,24 +71,32 @@ export async function normalizeOptions(options, mode, configWatchFiles = []) {
 		options.port = await getPort(options);
 	}
 
+	// FIXME: We cannot support eagerly passing `options.public` into config AND
+	// allowing plugins to lazily change them at the same time. Otherwise they'll
+	// get out of sync. This is design issue of our current plugin system, not a
+	// mere bug. The following snippet is a hotfix to get our docs site working
+	// again.
+	//
 	// If the CWD has a public/ directory, all files are assumed to be within it.
 	// From here, everything except node_modules and `out` are relative to public:
 	if (options.public !== '.' && (await isDirectory(join(options.cwd, options.public)))) {
 		options.cwd = join(options.cwd, options.public);
 	}
 
+	let prevPublicFolder = options.public;
 	await ensureOutDirPromise;
 
 	const pkgFile = resolve(options.root, 'package.json');
+	let pkg;
 	try {
-		const pkg = JSON.parse(await fs.readFile(pkgFile, 'utf-8'));
-		options.aliases = pkg.alias || {};
+		pkg = JSON.parse(await fs.readFile(pkgFile, 'utf-8'));
+		Object.assign(options.alias, pkg.alias || {});
 		configWatchFiles.push(pkgFile);
 	} catch (e) {
 		// ignore error, reading aliases from package.json is an optional feature
 	}
 
-	const EXTENSIONS = ['.js', '.ts', '.mjs'];
+	const EXTENSIONS = ['.ts', '.js', '.mjs'];
 
 	let custom;
 	let initialError;
@@ -98,7 +110,13 @@ export async function normalizeOptions(options, mode, configWatchFiles = []) {
 				// Create a temporary file to write compiled output into
 				// TODO: Do this in memory
 				configFile = resolve(options.root, 'wmr.config.js');
-				await compileSingleModule(file, { cwd: options.cwd, out: resolve('.'), hmr: false, rewriteNodeImports: false });
+				await compileSingleModule(file, {
+					cwd: options.cwd,
+					out: resolve('.'),
+					hmr: false,
+					rewriteNodeImports: false,
+					format: pkg && pkg.type === 'module' ? 'es' : 'commonjs'
+				});
 			}
 
 			const fileUrl = url.pathToFileURL(configFile);
@@ -107,7 +125,11 @@ export async function normalizeOptions(options, mode, configWatchFiles = []) {
 				// the URL.
 				const importSource = supportsSearchParams ? `(x => import(x + '?t=${Date.now()}'))` : `(x => import(x))`;
 				custom = await eval(importSource)(fileUrl.toString());
+
+				// We found our config file
+				break;
 			} catch (err) {
+				// eslint-disable-next-line no-console
 				console.log(err);
 				initialError = err;
 				try {
@@ -117,11 +139,11 @@ export async function normalizeOptions(options, mode, configWatchFiles = []) {
 						throw Error(`Failed to load wmr.config${ext}\n${initialError}\n${err2}`);
 					}
 				}
-			}
-
-			// Remove temporary file
-			if (ext === '.ts') {
-				fs.unlink(configFile);
+			} finally {
+				// Remove temporary file
+				if (ext === '.ts') {
+					fs.unlink(configFile);
+				}
 			}
 		}
 	}
@@ -174,6 +196,13 @@ export async function normalizeOptions(options, mode, configWatchFiles = []) {
 		}
 	}
 
+	if (options.aliases && Object.keys(options.aliases).length > 0) {
+		deprecated(
+			'Found "aliases" property in WMR\'s configuration. It will be removed in a future version of WMR. Please switch to "alias" instead.'
+		);
+		Object.assign(options.alias, options.aliases);
+	}
+
 	// Sort plugins by "enforce" phase. Default is "normal".
 	// The execution order is: "pre" -> "normal" -> "post"
 	if (options.plugins) {
@@ -187,19 +216,31 @@ export async function normalizeOptions(options, mode, configWatchFiles = []) {
 	await runConfigHook('config', options.plugins);
 	await runConfigHook('configResolved', options.plugins);
 
-	// Add src as a default alias if such a folder is present
-	if (!('src/*' in options.aliases)) {
-		const maybeSrc = resolve(options.root, 'src');
-		if (await isDirectory(maybeSrc)) {
-			options.aliases['src/*'] = maybeSrc;
+	if (prevPublicFolder !== options.public) {
+		// If the CWD has a public/ directory, all files are assumed to be within it.
+		// From here, everything except node_modules and `out` are relative to public:
+		if (options.public !== '.' && (await isDirectory(join(options.cwd, options.public)))) {
+			options.cwd = join(options.cwd, options.public);
 		}
 	}
 
-	// Resolve path-like aliases to absolute paths
-	for (const name in options.aliases) {
+	// Add src as a default alias if such a folder is present
+	if (!('src/*' in options.alias)) {
+		const maybeSrc = resolve(options.root, 'src');
+		if (
+			// Don't add src alias if we are serving from that folder already
+			maybeSrc !== options.cwd &&
+			(await isDirectory(maybeSrc))
+		) {
+			options.alias['src/*'] = maybeSrc;
+		}
+	}
+
+	// Resolve path-like alias mapping to absolute paths
+	for (const name in options.alias) {
 		if (name.endsWith('/*')) {
-			const value = options.aliases[name];
-			options.aliases[name] = resolve(options.root, value);
+			const value = options.alias[name];
+			options.alias[name] = resolve(options.root, value);
 		}
 	}
 

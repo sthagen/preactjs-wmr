@@ -138,7 +138,7 @@ Render bundle size statistics into an interactive `stats.html` file after `wmr b
 
 Print debugging messages intended for plugin authors to the terminal.
 
-### Aliases
+### Aliasing and Path-Mappings
 
 - Type: `{ string: string }`
 - Default: `{}`
@@ -149,7 +149,7 @@ Alias npm modules to different ones or use path mappings to shorten import speci
 import { defineConfig } from 'wmr';
 
 export default defineConfig({
-	aliases: {
+	alias: {
 		// Aliasing an npm module, in this case `react` to `preact/compat`
 		react: 'preact/compat'
 		// Aliasing `~` to a directory called `foo/`
@@ -179,3 +179,44 @@ export default defineConfig({
 ## Public Path
 
 ## Environment Variables
+
+WMR ships with built-in functionality to pass environment variables to your app. All environment variables starting with `WMR_` will be forwarded automatically. If you need more control you can supply an environment file to pass predefined variables around.
+
+```bash
+# Pass some API token via the command line (macOS/Linux)
+WMR_MY_TOKEN=abcdef wmr start
+```
+
+Using a file to load environment variables from `.env.local`:
+
+```env
+FOO=some value
+BAR=value
+```
+
+By default WMR looks for the following files, where `<NODE_ENV>` is the value of the `NODE_ENV` environment variable:
+
+- `.env`
+- `.env.local`
+- `.env.<NODE_ENV>`
+- `.env.<NODE_ENV>.local`
+
+If `NODE_ENV` is not set, WMR will set it to `development` by default and to `production` when WMR was called with the `build` command.
+
+### Accessing environment variables
+
+Environment variables can be accessed via `import.meta.env.NAME`. If you want to read `NODE_ENV` for example that would look like this:
+
+```js
+if (import.meta.env.NODE_ENV === 'production') {
+	// do something only during production
+}
+```
+
+For backwards compatibility reasons WMR allows you to read them from `process.env` too.
+
+```js
+if (process.env.NODE_ENV === 'production') {
+	// do something only during production
+}
+```

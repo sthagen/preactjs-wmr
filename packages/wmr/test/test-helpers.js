@@ -84,7 +84,7 @@ export async function loadFixture(name, env) {
 
 /**
  * @param {string} cwd
- * @param {...string} args
+ * @param {[...string[], string | Record<string, any>]} args
  * @returns {Promise<WmrInstance>}
  */
 export async function runWmr(cwd, ...args) {
@@ -285,6 +285,7 @@ export async function withLog(haystack, fn) {
 	try {
 		await fn();
 	} catch (err) {
+		// eslint-disable-next-line no-console
 		console.log(haystack.join('\n'));
 		throw err;
 	}
