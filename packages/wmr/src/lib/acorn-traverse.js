@@ -3,6 +3,7 @@ import * as jsxWalk from 'acorn-jsx-walk';
 import MagicString from 'magic-string';
 import * as astringLib from 'astring';
 import { codeFrame } from './output-utils.js';
+import { posix } from 'path';
 
 /**
  * @fileoverview
@@ -48,12 +49,12 @@ cjsDefault(jsxWalk).extend(walk.base);
  * @type {(api: { types: typeof types, template: typeof template }) => PluginContext}
  */
 
-/** @type {ReturnType<createContext> | empty} */
+/** @type {ReturnType<typeof createContext> | empty} */
 let codegenContext;
 
 /**
  * @param {Node} node
- * @param {ReturnType<createContext>} [ctx]
+ * @param {ReturnType<typeof createContext>} [ctx]
  */
 export function generate(node, ctx) {
 	codegenContext = ctx;
@@ -67,7 +68,7 @@ let codeGenerator = {
 	...astring.baseGenerator,
 	StringLiteral(node, state) {
 		if (node.raw) state.write(node.raw);
-		state.write(`'${node.value.replace(/'/g, "\\'")}'`);
+		else state.write(`'${node.value.replace(/'/g, "\\'")}'`);
 	},
 	ImportSpecifier(node, state) {
 		const { imported, local } = node;
@@ -100,7 +101,16 @@ let codeGenerator = {
 	// import(source)
 	ImportExpression(node, state) {
 		state.write('import(');
-		this[node.source.type](node.source, state);
+
+		// TODO: Sometimes this seems to have a source and sometimes
+		// an expression. I don't understand why. The expression seems
+		// to be only set when calling `t.importExpression()`
+		if (node.source) {
+			this[node.source.type](node.source, state);
+		} else {
+			this[node.expression.type](node.expression, state);
+		}
+
 		state.write(')');
 	},
 	JSXFragment(node, state) {
@@ -153,6 +163,12 @@ let codeGenerator = {
 		this[name.type](name, state);
 		if (value) {
 			state.write('=');
+
+			// JSX needs double quotes instead of single quotes
+			if (types.isStringLiteral(value)) {
+				value.raw = JSON.stringify(value.value);
+			}
+
 			this[value.type](value, state);
 		}
 	},
@@ -209,7 +225,7 @@ template.ast = function (str, expressions) {
 		str = str.reduce((str, q, i) => str + q + (i === expressions.length ? '' : expressions[i]), '');
 	}
 
-	/** @type {ReturnType<createContext>} */
+	/** @type {ReturnType<typeof createContext>} */
 	// @ts-ignore-next
 	const ctx = this.ctx;
 
@@ -227,7 +243,7 @@ class Path {
 	/**
 	 * @param {Node} node
 	 * @param {Node[]} ancestors
-	 * @param {ReturnType<createContext>} [ctx]
+	 * @param {ReturnType<typeof createContext>} ctx
 	 */
 	constructor(node, ancestors, ctx) {
 		if (node && ctx.paths.has(node)) {
@@ -446,6 +462,8 @@ const TYPES = {
 	importDeclaration: (specifiers, source) => ({ type: 'ImportDeclaration', specifiers, source }),
 	importSpecifier: (local, imported) => ({ type: 'ImportSpecifier', local, imported }),
 	importDefaultSpecifier: local => ({ type: 'ImportDefaultSpecifier', local }),
+	JSXIdentifier: name => ({ type: 'JSXIdentifier', name }),
+	JSXAttribute: (name, value) => ({ type: 'JSXAttribute', name, value }),
 	/** @type {(a:Node,b:Node)=>boolean} */
 	isNodesEquivalent(a, b) {
 		if (a instanceof Path) a = a.node;
@@ -551,14 +569,14 @@ const types = new Proxy(TYPES, {
 	}
 });
 
-/** @type {ReturnType<createContext>} */
+/** @type {ReturnType<typeof createContext>} */
 let visitingCtx;
 
 /**
  * @param {Node} root
  * @param {Record<string, Visitor>} visitors
  * @param {object} state
- * @this {{ ctx: ReturnType<createContext> }}
+ * @this {{ ctx: ReturnType<typeof createContext> }}
  */
 function visit(root, visitors, state) {
 	const { ctx } = this;
@@ -712,7 +730,7 @@ export function transform(
 	const allPlugins = [];
 	resolvePreset({ presets, plugins }, allPlugins);
 
-	/** @type {Record<string, ReturnType<createMetaVisitor>>} */
+	/** @type {Record<string, ReturnType<typeof createMetaVisitor>>} */
 	const visitors = {};
 
 	for (let i = 0; i < allPlugins.length; i++) {
@@ -721,7 +739,7 @@ export function transform(
 		const plugin = typeof id === 'string' ? require(id) : id;
 		const inst = plugin({ types, template }, options);
 		for (let i in inst.visitor) {
-			const visitor = visitors[i] || (visitors[i] = createMetaVisitor());
+			const visitor = visitors[i] || (visitors[i] = createMetaVisitor({ filename }));
 			visitor.visitors.push({
 				stateId,
 				visitor: inst.visitor[i],
@@ -745,8 +763,10 @@ export function transform(
 	function getSourceMap() {
 		if (!map) {
 			map = out.generateMap({
-				includeContent: false,
-				source: sourceFileName
+				includeContent: true,
+				// Must be set for most source map verifiers to work
+				source: sourceFileName || filename,
+				file: posix.basename(sourceFileName || filename || '')
 			});
 		}
 		return map;
@@ -787,14 +807,17 @@ function buildError(err, code, filename = 'unknown') {
 
 /**
  * An internal visitor that calls other visitors.
+ * @param {object} options
+ * @param {string} [options.filename]
  * @returns {Visitor & { visitors: ({ stateId: symbol, visitor: Visitor, opts?: any })[] }}
  */
-function createMetaVisitor() {
+function createMetaVisitor({ filename }) {
 	function getPluginState(state, v) {
 		let pluginState = state.get(v.stateId);
 		if (!pluginState) {
 			pluginState = new Map();
 			pluginState.opts = v.opts || {};
+			pluginState.filename = filename;
 			state.set(v.stateId, pluginState);
 		}
 		return pluginState;

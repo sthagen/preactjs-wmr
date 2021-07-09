@@ -1,5 +1,17 @@
 # create-wmr
 
+## 0.3.8
+
+### Patch Changes
+
+- [`5712956`](https://github.com/preactjs/wmr/commit/571295648739580910b156daa6cb7e6b77ef48ff) [#741](https://github.com/preactjs/wmr/pull/741) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Move alias declaration to config file + add docs link
+
+## 0.3.7
+
+### Patch Changes
+
+- [`5e57376`](https://github.com/preactjs/wmr/commit/5e573761fe5abbc880a8447b452b727d993fe61d) [#683](https://github.com/preactjs/wmr/pull/683) Thanks [@developit](https://github.com/developit)! - Use <link rel=modulepreload>
+
 ## 0.3.6
 
 ### Patch Changes

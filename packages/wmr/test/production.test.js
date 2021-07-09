@@ -91,6 +91,26 @@ describe('production', () => {
 		expect(stats.join('\n')).toMatch(/img\..*\.jpg/);
 	});
 
+	it('should support base64 in HTML', async () => {
+		await loadFixture('base64-html', env);
+		instance = await runWmr(env.tmp.path, 'build');
+		const code = await instance.done;
+
+		await withLog(instance.output, async () => {
+			expect(code).toEqual(0);
+
+			const { address, stop } = serveStatic(path.join(env.tmp.path, 'dist'));
+			cleanup.push(stop);
+
+			await env.page.goto(address, {
+				waitUntil: ['networkidle0', 'load']
+			});
+
+			const text = await env.page.content();
+			expect(text).toMatch(/it works/);
+		});
+	});
+
 	it('should support virtual ids', async () => {
 		await loadFixture('virtual-id', env);
 		instance = await runWmr(env.tmp.path, 'build');
@@ -145,6 +165,108 @@ describe('production', () => {
 
 			const output = await env.page.content();
 			expect(output).toMatch(/Resolved: url:\.\/foo\.js/);
+		});
+	});
+
+	it('should support class-fields', async () => {
+		await loadFixture('class-fields', env);
+		instance = await runWmr(env.tmp.path, 'build');
+
+		await withLog(instance.output, async () => {
+			const code = await instance.done;
+			expect(code).toEqual(0);
+
+			const { address, stop } = serveStatic(path.join(env.tmp.path, 'dist'));
+			cleanup.push(stop);
+
+			await env.page.goto(address, {
+				waitUntil: ['networkidle0', 'load']
+			});
+
+			const output = await env.page.content();
+			expect(output).toMatch(/class fields work/);
+		});
+	});
+
+	it('should support private class-fields', async () => {
+		await loadFixture('class-fields-private', env);
+		instance = await runWmr(env.tmp.path, 'build');
+
+		await withLog(instance.output, async () => {
+			const code = await instance.done;
+			expect(code).toEqual(0);
+
+			const { address, stop } = serveStatic(path.join(env.tmp.path, 'dist'));
+			cleanup.push(stop);
+
+			await env.page.goto(address, {
+				waitUntil: ['networkidle0', 'load']
+			});
+
+			const output = await env.page.content();
+			expect(output).toMatch(/class fields work/);
+		});
+	});
+
+	it('should support markdown', async () => {
+		await loadFixture('markdown', env);
+		instance = await runWmr(env.tmp.path, 'build');
+
+		await withLog(instance.output, async () => {
+			const code = await instance.done;
+			expect(code).toEqual(0);
+
+			const { address, stop } = serveStatic(path.join(env.tmp.path, 'dist'));
+			cleanup.push(stop);
+
+			await env.page.goto(address, {
+				waitUntil: ['networkidle0', 'load']
+			});
+
+			const output = await env.page.content();
+			expect(output).toMatch(/it works/);
+		});
+	});
+
+	describe('import assertions', () => {
+		it('should support .json assertion', async () => {
+			await loadFixture('import-assertions', env);
+			instance = await runWmr(env.tmp.path, 'build');
+
+			await withLog(instance.output, async () => {
+				const code = await instance.done;
+				expect(code).toEqual(0);
+
+				const { address, stop } = serveStatic(path.join(env.tmp.path, 'dist'));
+				cleanup.push(stop);
+
+				await env.page.goto(address, {
+					waitUntil: ['networkidle0', 'load']
+				});
+
+				const output = await env.page.content();
+				expect(output).toMatch(/{"foo":"bar"}/);
+			});
+		});
+
+		it('should support dynamic .json assertion', async () => {
+			await loadFixture('import-assertions-dynamic', env);
+			instance = await runWmr(env.tmp.path, 'build');
+
+			await withLog(instance.output, async () => {
+				const code = await instance.done;
+				expect(code).toEqual(0);
+
+				const { address, stop } = serveStatic(path.join(env.tmp.path, 'dist'));
+				cleanup.push(stop);
+
+				await env.page.goto(address, {
+					waitUntil: ['networkidle0', 'load']
+				});
+
+				const output = await env.page.content();
+				expect(output).toMatch(/{"default":{"foo":"bar"}}/);
+			});
 		});
 	});
 
@@ -325,7 +447,7 @@ describe('production', () => {
 			await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 });
 
 			// Nexus 5 viewport + mobile, disable caching:
-			await env.page.emulate(require('puppeteer/DeviceDescriptors').devicesMap['Nexus 5']);
+			await env.page.emulate(require('puppeteer/lib/cjs/puppeteer/common/DeviceDescriptors').devicesMap['Nexus 5']);
 			await env.page.setCacheEnabled(false);
 
 			await page.coverage.startJSCoverage();
@@ -649,6 +771,28 @@ describe('production', () => {
 			// Check if stack trace is present
 			expect(instance.output.join('\n')).toMatch(/^\s+at\s\w+/gm);
 			expect(code).toBe(1);
+		});
+
+		it('config should support supplying additional links to prerender', async () => {
+			await loadFixture('prerender-additional-links', env);
+			instance = await runWmr(env.tmp.path, 'build', '--prerender');
+			const code = await instance.done;
+			console.info(instance.output.join('\n'));
+			expect(instance.output.join('\n')).toMatch(/Prerendered 2 pages/i);
+			expect(code).toBe(0);
+
+			expect(await fs.access(path.join(env.tmp.path, 'dist', 'non-existent-link', 'index.html'))).toBeUndefined();
+		});
+
+		it('config should throw if no prerender function is exported', async () => {
+			await loadFixture('prerender-missing-export', env);
+			instance = await runWmr(env.tmp.path, 'build', '--prerender');
+			const code = await instance.done;
+
+			await withLog(instance.output, async () => {
+				expect(code).toBe(1);
+				expect(instance.output.join('\n')).toMatch(/No prerender\(\) function/i);
+			});
 		});
 	});
 

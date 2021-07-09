@@ -7,6 +7,7 @@ import { promisify } from 'util';
 import { get as httpGet } from 'http';
 import polka from 'polka';
 import sirv from 'sirv';
+import { isDirectory } from '../src/lib/fs-utils.js';
 
 export function dent(str) {
 	str = String(str);
@@ -56,6 +57,13 @@ export async function loadFixture(name, env) {
 	await fs.mkdir(env.tmp.path, { recursive: true });
 
 	await ncp(fixture, env.tmp.path);
+
+	// Delete copied .cache folder in case tests are run locally
+	const cacheDir = path.join(env.tmp.path, '.cache');
+	if (await isDirectory(cacheDir)) {
+		await fs.rmdir(cacheDir, { recursive: true });
+	}
+
 	try {
 		await fs.mkdir(path.join(env.tmp.path, 'node_modules', 'wmr'), { recursive: true });
 		await fs.mkdir(path.join(env.tmp.path, 'node_modules', '@wmrjs', 'directory-import', 'src'), { recursive: true });
@@ -289,6 +297,19 @@ export async function withLog(haystack, fn) {
 		console.log(haystack.join('\n'));
 		throw err;
 	}
+}
+
+/**
+ * Update the contents of a file. Useful for HMR or watch tests
+ * @param {string} tempDir Path to the temporary fixture directory
+ * @param {string} file filename or fiel path
+ * @param {(content: string) => string} replacer callback to replace content
+ * @returns {Promise<void>}
+ */
+export async function updateFile(tempDir, file, replacer) {
+	const compPath = path.join(tempDir, file);
+	const content = await fs.readFile(compPath, 'utf-8');
+	await fs.writeFile(compPath, replacer(content));
 }
 
 /**

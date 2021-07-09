@@ -92,16 +92,16 @@ The mode WMR was started in.
 ### cwd
 
 - Type: `string`
-- Default: `process.cwd()/public/`
+- Default: `process.cwd()`
 
-The main directory to serve files from.
+The path to where WMR was launched from. Used to look up `package.json`.
 
 ### root
 
 - Type: `string`
-- Default: `process.cwd()`
+- Default: `process.cwd()/public`
 
-The path to where WMR was launched from. Used to look up `package.json`.
+The main directory to serve files from
 
 ### out
 
@@ -123,6 +123,22 @@ The host to use when launching WMR in development mode (`start`) or as a file se
 - Default: `8080`
 
 The host to use when launching WMR in development mode (`start`) or as a file server (`serve`).
+
+### customRoutes
+
+- Type: `string[]`
+- Default: `[]`
+
+Add additional routes to prerender manually that cannot be discovered through the automatic [prerendering](./prerendering) link discovery process.
+
+```js
+// wmr config
+import { defineConfig } from 'wmr';
+
+export default defineConfig({
+	customRoutes: ['/foo/bar', '/my-other-route', '/rss.xml']
+});
+```
 
 ### visualize
 

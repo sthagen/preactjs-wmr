@@ -35,6 +35,24 @@ function transformWithPlugin(code, plugin, options = {}) {
 const withVisitor = visitor => code => transformWithPlugin(code, api => ({ name: '', visitor: visitor(api.types) }));
 
 describe('acorn-traverse', () => {
+	it("should have 'filename' in plugin state", () => {
+		let filename = '';
+		transformWithPlugin(
+			'const a = 2;',
+			() => ({
+				name: 'foo',
+				visitor: {
+					Program(path, state) {
+						filename = state.filename;
+					}
+				}
+			}),
+			{ filename: 'foobar.js' }
+		);
+
+		expect(filename).toEqual('foobar.js');
+	});
+
 	describe('code generation', () => {
 		it('should parse and regenerate ES2020 syntax', async () => {
 			// While we try to avoid doing (full) codegen for performance reasons,
@@ -59,6 +77,23 @@ describe('acorn-traverse', () => {
 		it('should serialize JSXMemberExpression', () => {
 			const str = generate(parse(`<a.b.c />`)).trim();
 			expect(str).toMatchInlineSnapshot('"<a.b.c/>;"');
+		});
+
+		it('should serialize created JSXAttributes', () => {
+			const str = transformWithPlugin('<div />', ({ types: t }) => {
+				return {
+					name: 'foo',
+					visitor: {
+						JSXOpeningElement(path) {
+							// eslint-disable-next-line new-cap
+							const attr = t.JSXAttribute(t.JSXIdentifier('foo'), t.stringLiteral('bar'));
+							path.pushContainer('attributes', attr);
+						}
+					}
+				};
+			});
+
+			expect(str).toMatchInlineSnapshot(`"<div foo=\\"bar\\"/>"`);
 		});
 	});
 

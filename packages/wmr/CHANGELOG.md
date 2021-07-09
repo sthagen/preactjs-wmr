@@ -1,5 +1,142 @@
 # wmr
 
+## 3.3.1
+
+### Patch Changes
+
+- [`d94937f`](https://github.com/preactjs/wmr/commit/d94937fee0804657006382711c3b2e169fdff98a) [#728](https://github.com/preactjs/wmr/pull/728) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix `Cannot read property 'edit' of null` error. This was caused by a wrong alternative to substring matches of `String.prototype.replace`.
+
+## 3.3.0
+
+### Minor Changes
+
+- [`b69f35a`](https://github.com/preactjs/wmr/commit/b69f35a7a394edb923fe26dae0d72e36d5f2eb5d) [#724](https://github.com/preactjs/wmr/pull/724) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Allow plugins to intercept any file that's imported in JavaScript, not just script and stylesheet files.
+
+### Patch Changes
+
+- [`e963a56`](https://github.com/preactjs/wmr/commit/e963a560b46f0cb210878696b2c4c7cf6f2375aa) [#715](https://github.com/preactjs/wmr/pull/715) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Rewrite internal source map handling. This adds full support for source maps during `development` and `production` and ensures that `.map` files are served correctly.
+
+## 3.2.0
+
+### Minor Changes
+
+- [`8aff0a1`](https://github.com/preactjs/wmr/commit/8aff0a157fe25597701809aa4cadcf37dd336a46) [#712](https://github.com/preactjs/wmr/pull/712) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Add support for logical assignment operators.
+
+  ```js
+  // "Or Or Equals" (or, the Mallet operator :wink:)
+  a ||= b;
+  a || (a = b);
+
+  // "And And Equals"
+  a &&= b;
+  a && (a = b);
+
+  // "QQ Equals"
+  a ??= b;
+  a ?? (a = b);
+  ```
+
+* [`71ef3aa`](https://github.com/preactjs/wmr/commit/71ef3aae680230d39f7391e576659ce2af576518) [#710](https://github.com/preactjs/wmr/pull/710) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Add support for private class fields which is a recent addition to JavaScript (currently Stage 3). We're adding it because it's supported in all major browsers natively.
+
+  ```js
+  class Foo {
+  	#hi() {
+  		console.log('hellow');
+  	}
+  	greet() {
+  		this.#hi();
+  	}
+  }
+  new Foo().greet();
+  ```
+
+- [`d49c674`](https://github.com/preactjs/wmr/commit/d49c67464dfc5fccd3f6df6b6bcb98806e744009) [#717](https://github.com/preactjs/wmr/pull/717) Thanks [@rschristian](https://github.com/rschristian)! - Adds new config option for specifying additional links to prerender in your WMR configuration file.
+
+  ```js
+  // wmr config
+  import { defineConfig } from 'wmr';
+
+  export default defineConfig({
+  	customRoutes: ['/foo/bar', '/my-other-route', '/rss.xml']
+  });
+  ```
+
+### Patch Changes
+
+- [`21b467e`](https://github.com/preactjs/wmr/commit/21b467e8be17ca044dbf92009e603bf9256bf7df) [#719](https://github.com/preactjs/wmr/pull/719) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix HMR updates not bubbled through proxy modules. This resolves an issue where the page was not updated when a new CSS class was added to a CSS-Module or Sass-Module.
+
+* [`34ce488`](https://github.com/preactjs/wmr/commit/34ce488a05e5530e05879a928568320f18d76b57) [#713](https://github.com/preactjs/wmr/pull/713) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix missing version on `--version` argument
+
+## 3.1.1
+
+### Patch Changes
+
+- [`01fca1c`](https://github.com/preactjs/wmr/commit/01fca1cbe058b8b93f24293d8d51b30926db1455) [#704](https://github.com/preactjs/wmr/pull/704) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Sass: Fix HMR not working on windows due to `node-sass` returning unix-style paths
+
+* [`ae087f7`](https://github.com/preactjs/wmr/commit/ae087f773d6c43305e9353b8adc6eb902f1c5a96) [#706](https://github.com/preactjs/wmr/pull/706) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Sass: Fix relative import specifiers in the form of `./foo.scss` being resolved against the wrong directory
+
+## 3.1.0
+
+### Minor Changes
+
+- [`22f3ac9`](https://github.com/preactjs/wmr/commit/22f3ac90c8ded4be03a1ae131389d275e12cc1d8) [#630](https://github.com/preactjs/wmr/pull/630) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Add support for [import assertions](https://github.com/tc39/proposal-import-assertions) syntax that is very likely to come in an upcoming version of JavaScript. Import Assertions are a native way to load non-js files in ESM environments.
+
+  ```js
+  import foo from './foo.json' assert { type: 'json' };
+  ```
+
+  At the time of this writing this is only supported in Chrome, so we'll downtranspile import assertions to leverage loaders. This allows the code to run all browsers WMR supports.
+
+### Patch Changes
+
+- [`f12ffe3`](https://github.com/preactjs/wmr/commit/f12ffe348551850985e20463422bb2dadfbcf8de) [#701](https://github.com/preactjs/wmr/pull/701) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix sass crashing when an imported file is not found
+
+## 3.0.2
+
+### Patch Changes
+
+- [`94c9a58`](https://github.com/preactjs/wmr/commit/94c9a5869d624188293829dc370c45a1bf6d3253) [#696](https://github.com/preactjs/wmr/pull/696) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix missing terminal colors in CI environments
+
+* [`5ba6edc`](https://github.com/preactjs/wmr/commit/5ba6edc232f28aaf788a50b43cf8cf7d62a4a6e5) [#698](https://github.com/preactjs/wmr/pull/698) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix crash on Windows due to invalid cache file paths
+
+## 3.0.1
+
+### Patch Changes
+
+- [`b134646`](https://github.com/preactjs/wmr/commit/b1346460da8485f0767911bbb3a88e9731bd8cfb) [#694](https://github.com/preactjs/wmr/pull/694) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix potential issue during development, where different CSS assets would share the same URL
+
+## 3.0.0
+
+### Major Changes
+
+- [`22150b3`](https://github.com/preactjs/wmr/commit/22150b3d1e35ba272930e9506744d6bcc0a40500) [#680](https://github.com/preactjs/wmr/pull/680) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix swapped usage of `cwd` vs `root`. Now, `cwd` always refers to the current working directory and `root` the web root to serve from (= usually cwd+/public).
+
+  This change was done to reduce the amount of extra knowledge to be aware of when using WMR. It was a frequent source of confusion.
+
+  #### Migration guide:
+
+  If you used `options.cwd` or `options.root` in one of your plugins you need to swap them.
+
+* [`0f91e7f`](https://github.com/preactjs/wmr/commit/0f91e7f879f503e857100259202d5aedfa3db150) [#684](https://github.com/preactjs/wmr/pull/684) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Completely rewrite our stylesheet pipeline. All CSS files can now be intercepted from plugins allowing us to leverage the same pipeline that we use for production during development.
+
+  - Fixes `.scss/.sass` not compiled on watch
+  - Fixes nested `.scss/.sass` files not compiled with sass
+  - Fixes `.scss/.sass` files not compiled when directly referenced in HTML
+  - Fixes asset caching overwriting each others entries
+  - Adds groundwork for intercepting urls inside css for aliasing or resolving from `node_modules`
+
+### Minor Changes
+
+- [`97c3ab5`](https://github.com/preactjs/wmr/commit/97c3ab557c053472bf7c81446db0c81a8da3473b) [#685](https://github.com/preactjs/wmr/pull/685) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Sass: Include imported urls and file path into plugin resolution. This allows sass to load aliased files for example.
+
+### Patch Changes
+
+- [`8c3993f`](https://github.com/preactjs/wmr/commit/8c3993f85f5ae3cf48bf8d5336e1cc01bc9a1d68) [#676](https://github.com/preactjs/wmr/pull/676) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Ensure that built-in plugins only work on files they can handle
+
+* [`cdf5179`](https://github.com/preactjs/wmr/commit/cdf5179af941551b6c2da0d910cf9ba2afd91e96) [#690](https://github.com/preactjs/wmr/pull/690) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix nested CSS HMR not working
+
+- [`ea6606f`](https://github.com/preactjs/wmr/commit/ea6606fa14f1f0c0b5ab9f0f070333046371e87e) [#691](https://github.com/preactjs/wmr/pull/691) Thanks [@marvinhagemeister](https://github.com/marvinhagemeister)! - Fix CLI environment variables overwritten by `.env` files
+
 ## 2.2.2
 
 ### Patch Changes

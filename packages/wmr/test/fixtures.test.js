@@ -11,19 +11,14 @@ import {
 	waitForNotMessage,
 	waitFor,
 	withLog,
-	waitForPass
+	waitForPass,
+	updateFile
 } from './test-helpers.js';
 import { rollup } from 'rollup';
 import nodeBuiltinsPlugin from '../src/plugins/node-builtins-plugin.js';
 import { supportsSearchParams } from '../src/lib/net-utils.js';
 
 jest.setTimeout(30000);
-
-async function updateFile(tempDir, file, replacer) {
-	const compPath = path.join(tempDir, file);
-	const content = await fs.readFile(compPath, 'utf-8');
-	await fs.writeFile(compPath, replacer(content));
-}
 
 describe('fixtures', () => {
 	/** @type {TestEnv} */
@@ -56,6 +51,18 @@ describe('fixtures', () => {
 		await loadFixture('class-fields', env);
 		instance = await runWmrFast(env.tmp.path);
 		expect(await getOutput(env, instance)).toMatch(`class fields work`);
+	});
+
+	it('should support private class-fields', async () => {
+		await loadFixture('class-fields-private', env);
+		instance = await runWmrFast(env.tmp.path);
+		expect(await getOutput(env, instance)).toMatch(`class fields work`);
+	});
+
+	it('should support logical assignments', async () => {
+		await loadFixture('logical-assignment', env);
+		instance = await runWmrFast(env.tmp.path);
+		expect(await getOutput(env, instance)).toMatch(`{"foo":"foo","baz":"qux"}`);
 	});
 
 	it('should not if sub-import is not in export map', async () => {
@@ -110,6 +117,14 @@ describe('fixtures', () => {
 		const text = await getOutput(env, instance);
 
 		expect(text).toMatch('foo.ts');
+	});
+
+	it('should pass any file', async () => {
+		await loadFixture('markdown', env);
+		instance = await runWmrFast(env.tmp.path);
+		const text = await getOutput(env, instance);
+
+		expect(text).toMatch('it works');
 	});
 
 	describe('empty', () => {
@@ -298,16 +313,16 @@ describe('fixtures', () => {
 			await withLog(instance.output, async () => {
 				await getOutput(env, instance);
 
-				await await waitForPass(async () => {
+				await waitForPass(async () => {
 					const color = await env.page.$eval('h1', el => getComputedStyle(el).color);
 					expect(color).toBe('rgb(255, 218, 185)');
 				});
 
-				updateFile(env.tmp.path, 'foo/style.css', () => {
+				await updateFile(env.tmp.path, 'foo/style.css', () => {
 					return `h1 { color: red; }`;
 				});
 
-				await await waitForPass(async () => {
+				await waitForPass(async () => {
 					const color = await env.page.$eval('h1', el => getComputedStyle(el).color);
 					expect(color).toBe('rgb(255, 0, 0)');
 				});
@@ -363,37 +378,79 @@ describe('fixtures', () => {
 		});
 	});
 
-	describe('CSS', () => {
-		it('should load referenced files via @import', async () => {
-			await loadFixture('css-imports', env);
+	describe('Sass', () => {
+		it('should transform sass files', async () => {
+			await loadFixture('css-sass', env);
 			instance = await runWmrFast(env.tmp.path);
 			await getOutput(env, instance);
 
 			await withLog(instance.output, async () => {
-				expect(await env.page.$eval('h1', el => getComputedStyle(el).color)).toBe('rgb(255, 0, 0)');
+				expect(await env.page.$eval('h1', el => getComputedStyle(el).color)).toMatch(/rgb\(255, 0, 0\)/);
 			});
 		});
 
-		it('should load referenced files via url()', async () => {
-			await loadFixture('css-imports', env);
+		it('should transform sass modules', async () => {
+			await loadFixture('css-sass-module', env);
 			instance = await runWmrFast(env.tmp.path);
 			await getOutput(env, instance);
-			expect(await env.page.$eval('body', el => getComputedStyle(el).background)).toMatch(/img\.jpg/);
+
+			await withLog(instance.output, async () => {
+				expect(await env.page.$eval('h1', el => getComputedStyle(el).color)).toMatch(/rgb\(255, 0, 0\)/);
+			});
 		});
 
-		it('should warn on CSS modules with reserved class names', async () => {
-			await loadFixture('css-module-reserved', env);
+		it('should transform aliased imports modules', async () => {
+			await loadFixture('css-sass-alias', env);
 			instance = await runWmrFast(env.tmp.path);
 			await getOutput(env, instance);
 
-			await waitForPass(async () => {
-				expect(await env.page.$eval('.foo', el => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 218, 185)');
-				expect(await env.page.$eval('.new', el => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 255, 0)');
-				expect(await env.page.$eval('.debugger', el => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 0, 0)');
-				expect(await env.page.$eval('.const', el => getComputedStyle(el).backgroundColor)).toBe('rgb(255, 218, 185)');
+			await withLog(instance.output, async () => {
+				expect(await env.page.$eval('h1', el => getComputedStyle(el).color)).toMatch(/rgb\(255, 0, 0\)/);
 			});
+		});
 
-			expect(instance.output.join('\n')).toMatch(/Cannot use reserved word/);
+		it('should not crash on non-existing files', async () => {
+			await loadFixture('css-sass-file-error', env);
+			instance = await runWmrFast(env.tmp.path);
+			await getOutput(env, instance);
+
+			await withLog(instance.output, async () => {
+				await waitForPass(async () => {
+					expect(instance.output.join('\n')).toMatch(/Can't find stylesheet to import/);
+				});
+			});
+		});
+
+		it('should catch resolve error', async () => {
+			await loadFixture('css-sass-resolve-error', env);
+			instance = await runWmrFast(env.tmp.path);
+			await getOutput(env, instance);
+
+			await withLog(instance.output, async () => {
+				await waitForPass(async () => {
+					expect(instance.output.join('\n')).toMatch(/500 \.\/public\/style.scss - fail/);
+				});
+			});
+		});
+
+		it('should resolve nested alias import', async () => {
+			await loadFixture('css-sass-nested-alias', env);
+			instance = await runWmrFast(env.tmp.path);
+			await getOutput(env, instance);
+
+			await withLog(instance.output, async () => {
+				expect(await env.page.$eval('h1', el => getComputedStyle(el).color)).toMatch(/rgb\(255, 0, 0\)/);
+			});
+		});
+
+		it('should resolve js-style relative alias import', async () => {
+			await loadFixture('css-sass-alias-relative', env);
+			instance = await runWmrFast(env.tmp.path);
+			await getOutput(env, instance);
+
+			await withLog(instance.output, async () => {
+				expect(await env.page.$eval('h1', el => getComputedStyle(el).color)).toMatch(/rgb\(255, 0, 0\)/);
+			});
 		});
 	});
 
@@ -430,10 +487,10 @@ describe('fixtures', () => {
 				content.replace('<p class="home">Home</p>', '<p class="home">Away</p>')
 			);
 
-			await timeout(1000);
-
-			text = home ? await home.evaluate(el => el.textContent) : null;
-			expect(text).toEqual('Away');
+			await waitForPass(async () => {
+				text = home ? await home.evaluate(el => el.textContent) : null;
+				expect(text).toEqual('Away');
+			});
 		});
 
 		it('should bubble up updates in non-accepted files', async () => {
@@ -520,39 +577,9 @@ describe('fixtures', () => {
 			text = child ? await child.evaluate(el => el.textContent) : null;
 			expect(text).toEqual('child');
 		});
-
-		it('should hot reload a css-file imported from index.html', async () => {
-			await loadFixture('hmr', env);
-			instance = await runWmrFast(env.tmp.path);
-			await getOutput(env, instance);
-
-			expect(await page.$eval('body', e => getComputedStyle(e).color)).toBe('rgb(51, 51, 51)');
-
-			await updateFile(env.tmp.path, 'index.css', content => content.replace('color: #333;', 'color: #000;'));
-
-			await timeout(1000);
-
-			expect(await page.$eval('body', e => getComputedStyle(e).color)).toBe('rgb(0, 0, 0)');
-		});
-
-		it('should hot reload a module css-file', async () => {
-			await loadFixture('hmr', env);
-			instance = await runWmrFast(env.tmp.path);
-			await getOutput(env, instance);
-
-			expect(await page.$eval('main', e => getComputedStyle(e).color)).toBe('rgb(51, 51, 51)');
-
-			await updateFile(env.tmp.path, 'style.module.css', content => content.replace('color: #333;', 'color: #000;'));
-
-			await timeout(1000);
-
-			expect(await page.$eval('main', e => getComputedStyle(e).color)).toBe('rgb(0, 0, 0)');
-		});
 	});
 
 	describe('hmr-scss', () => {
-		const timeout = n => new Promise(r => setTimeout(r, n));
-
 		it('should hot reload an scss-file imported from index.html', async () => {
 			await loadFixture('hmr-scss', env);
 			instance = await runWmrFast(env.tmp.path);
@@ -562,9 +589,9 @@ describe('fixtures', () => {
 
 			await updateFile(env.tmp.path, 'index.scss', content => content.replace('color: #333;', 'color: #000;'));
 
-			await timeout(1000);
-
-			expect(await page.$eval('body', e => getComputedStyle(e).color)).toBe('rgb(0, 0, 0)');
+			await waitForPass(async () => {
+				expect(await page.$eval('body', e => getComputedStyle(e).color)).toBe('rgb(0, 0, 0)');
+			});
 		});
 
 		it('should hot reload an imported scss-file from another scss-file', async () => {
@@ -576,9 +603,9 @@ describe('fixtures', () => {
 
 			await updateFile(env.tmp.path, 'home.scss', content => content.replace('color: #333;', 'color: #000;'));
 
-			await timeout(1000);
-
-			expect(await page.$eval('main', e => getComputedStyle(e).color)).toBe('rgb(0, 0, 0)');
+			await waitForPass(async () => {
+				expect(await page.$eval('main', e => getComputedStyle(e).color)).toBe('rgb(0, 0, 0)');
+			});
 		});
 	});
 
@@ -685,6 +712,15 @@ describe('fixtures', () => {
 			const output = await getOutput(env, instance);
 			expect(output).toMatch(/it works/i);
 		});
+
+		it('should deal with process evaluation', async () => {
+			await loadFixture('process-object', env);
+			instance = await runWmrFast(env.tmp.path);
+			await withLog(instance.output, async () => {
+				const output = await getOutput(env, instance);
+				expect(output).toMatch(/false/i);
+			});
+		});
 	});
 
 	describe('import.meta.env', () => {
@@ -707,6 +743,22 @@ describe('fixtures', () => {
 			const output = await getOutput(env, instance);
 			expect(output).not.toMatch(/fail/i);
 			expect(output).toMatch(/foo bar/i);
+		});
+	});
+
+	describe('import assertions', () => {
+		it('should support .json assertion', async () => {
+			await loadFixture('import-assertions', env);
+			instance = await runWmrFast(env.tmp.path);
+			const output = await getOutput(env, instance);
+			expect(output).toMatch(/{"foo":"bar"}/);
+		});
+
+		it('should support dynamic .json assertion', async () => {
+			await loadFixture('import-assertions-dynamic', env);
+			instance = await runWmrFast(env.tmp.path);
+			const output = await getOutput(env, instance);
+			expect(output).toMatch(/{"default":{"foo":"bar"}}/);
 		});
 	});
 
