@@ -379,6 +379,17 @@ describe('fixtures', () => {
 	});
 
 	describe('Sass', () => {
+		// eslint-disable-next-line jest/expect-expect
+		it("should throw when a sass compiler can't be found", async () => {
+			await loadFixture('css-sass', env);
+			instance = await runWmrFast(env.tmp.path, { env: { DISABLE_SASS: 'true' } });
+			await getOutput(env, instance);
+
+			await withLog(instance.output, async () => {
+				await waitForMessage(instance.output, /Please install a sass implementation/);
+			});
+		});
+
 		it('should transform sass files', async () => {
 			await loadFixture('css-sass', env);
 			instance = await runWmrFast(env.tmp.path);
@@ -1013,6 +1024,13 @@ describe('fixtures', () => {
 			const text = await env.page.evaluate(`fetch('/test').then(r => r.text())`);
 			expect(text).toEqual('it works');
 		});
+
+		it('should run custom middlewares first', async () => {
+			await loadFixture('middleware-custom', env);
+			instance = await runWmrFast(env.tmp.path);
+			const output = await getOutput(env, instance);
+			expect(output).toMatch(/it works/);
+		});
 	});
 
 	describe('node built-ins', () => {
@@ -1040,6 +1058,15 @@ describe('fixtures', () => {
 			});
 			expect(warns).toHaveLength(1);
 			expect(warns[0].message.trim()).toEqual(warning.trim());
+		});
+	});
+
+	describe('TypeScript', () => {
+		it('should support override keyword', async () => {
+			await loadFixture('typescript-override', env);
+			instance = await runWmrFast(env.tmp.path);
+			await env.page.goto(await instance.address, { waitUntil: 'networkidle0' });
+			expect(await env.page.content()).toMatch(/it works/);
 		});
 	});
 });
