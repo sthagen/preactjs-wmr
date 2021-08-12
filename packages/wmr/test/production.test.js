@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 import path from 'path';
 import { promises as fs } from 'fs';
-import { setupTest, teardown, runWmr, loadFixture, serveStatic, withLog } from './test-helpers.js';
+import { setupTest, teardown, runWmr, loadFixture, serveStatic, withLog, updateFile } from './test-helpers.js';
 import { printCoverage, analyzeTrace } from './tracing-helpers.js';
 
 jest.setTimeout(30000);
@@ -307,6 +307,60 @@ describe('production', () => {
 				const text = await env.page.content();
 				expect(text).toMatch(/it works/);
 			});
+		});
+
+		it('should pick up scss from the html file', async () => {
+			await loadFixture('css-sass-html', env);
+			instance = await runWmr(env.tmp.path, 'build');
+
+			const code = await instance.done;
+			const dir = await fs.readdir(path.join(env.tmp.path, 'dist', 'assets'));
+			expect(dir.some(x => x.endsWith('.scss'))).toBeTruthy();
+			expect(code).toEqual(0);
+			const { address, stop } = serveStatic(path.join(env.tmp.path, 'dist'));
+			cleanup.push(stop);
+			await env.page.goto(address, {
+				waitUntil: ['networkidle0', 'load']
+			});
+			expect(await env.page.$eval('div', el => getComputedStyle(el).color)).toBe('rgb(255, 0, 0)');
+		});
+
+		it('should correctly hash imported files', async () => {
+			await loadFixture('css-sass-import-hash', env);
+			instance = await runWmr(env.tmp.path, 'build');
+
+			await instance.done;
+			const dir = await fs.readdir(path.join(env.tmp.path, 'dist'));
+			const [cssFile] = await fs.readdir(path.join(env.tmp.path, 'dist', 'assets'));
+			expect(dir.some(x => x.endsWith('.scss') || x.endsWith('.css'))).toBeFalsy();
+			const hash = cssFile.split('.')[1];
+
+			await updateFile(path.join(env.tmp.path, 'public'), '2.scss', content => content.replace('green', 'red'));
+			instance = await runWmr(env.tmp.path, 'build');
+			await instance.done;
+			const [newCssFile] = await fs.readdir(path.join(env.tmp.path, 'dist', 'assets'));
+			const newHash = newCssFile.split('.')[1];
+
+			expect(hash === newHash).toBeFalsy();
+		});
+
+		it('should correctly hash imported files from html', async () => {
+			await loadFixture('css-sass-import-hash-html', env);
+			instance = await runWmr(env.tmp.path, 'build');
+
+			await instance.done;
+			const dir = await fs.readdir(path.join(env.tmp.path, 'dist'));
+			const [cssFile] = await fs.readdir(path.join(env.tmp.path, 'dist', 'assets'));
+			expect(dir.some(x => x.endsWith('.scss') || x.endsWith('.css'))).toBeFalsy();
+			const hash = cssFile.split('.')[1];
+
+			await updateFile(path.join(env.tmp.path, 'public'), '2.scss', content => content.replace('green', 'red'));
+			instance = await runWmr(env.tmp.path, 'build');
+			await instance.done;
+			const [newCssFile] = await fs.readdir(path.join(env.tmp.path, 'dist', 'assets'));
+			const newHash = newCssFile.split('.')[1];
+
+			expect(hash === newHash).toBeFalsy();
 		});
 
 		it('should alias CSS', async () => {

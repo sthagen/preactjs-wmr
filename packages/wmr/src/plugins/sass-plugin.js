@@ -48,6 +48,62 @@ async function renderSass({ id, ...opts }) {
 	};
 }
 
+export async function transformSass(id, fileName, source, root, production, sourcemap) {
+	const result = await renderSass({
+		// Custom options for logging
+		id,
+		file: fileName,
+		data: source,
+		includePaths: [path.dirname(id)],
+		importer: [
+			// Note: Async importers MUST return `undefined`, otherwise they
+			// don't work!!!
+			(url, prev, done) => {
+				sassResolver(url, prev, done, this.resolve.bind(this), root);
+			}
+		],
+		outputStyle: production ? 'compressed' : undefined,
+		sourceMap: sourcemap !== false
+	});
+
+	return result;
+}
+
+export async function sassResolver(url, prev, done, pluginResolve, root) {
+	// TODO: Rollup only supports top to bottom compilation, but we
+	// need a way to do the opposite here to support loading virtual
+	// sass modules. This is a limitation in Rollup. So for now we only
+	// do resolution here.
+
+	// Sass always returns file urls with absolute paths
+	if (url.startsWith('file://')) {
+		url = url.slice('file://'.length);
+	}
+
+	let resolved;
+	try {
+		const importer = prev !== 'stdin' ? prev : null;
+		resolved = await pluginResolve(url, importer);
+	} catch (err) {
+		done(err);
+		return;
+	}
+
+	let file = resolved ? resolved.id : url;
+
+	// Bail out if nothing changed.
+	if (file === url) {
+		done(null);
+		return;
+	}
+
+	if (!path.isAbsolute(file)) {
+		file = path.join(root, file);
+	}
+
+	done({ file });
+}
+
 /**
  * Transform SASS files with node-sass.
  * @param {object} opts
@@ -56,37 +112,27 @@ async function renderSass({ id, ...opts }) {
  * @param {string} opts.root
  * @returns {import('rollup').Plugin}
  */
-export default function sassPlugin({ production, sourcemap, root }) {
+export default function sassPlugin({ production, sourcemap, root, mergedAssets }) {
 	/** @type {Map<string, Set<string>>} */
 	const fileToBundles = new Map();
 
-	async function sassResolver(url, prev, done, pluginResolve) {
-		// TODO: Rollup only supports top to bottom compilation, but we
-		// need a way to do the opposite here to support loading virtual
-		// sass modules. This is a limitation in Rollup. So for now we only
-		// do resolution here.
-		let resolved;
-		try {
-			const importer = prev !== 'stdin' ? prev : null;
-			resolved = await pluginResolve(url, importer);
-		} catch (err) {
-			done(err);
-			return;
+	async function handleError(err) {
+		if (err.file) {
+			const code = await fs.readFile(err.file, 'utf-8');
+			err.codeFrame = createCodeFrame(code, err.line - 1, err.column);
 		}
+		// Sass mixes stack in message, therefore we need to extract
+		// just the message
+		let messageArr = [];
+		err.message.split('\n').some(line => {
+			if (/^\s*(?:\d+\s*)?[│╷]\s*/.test(line)) {
+				return true;
+			}
+			messageArr.push(line);
+		});
 
-		let file = resolved ? resolved.id : url;
-
-		// Bail out if nothing changed.
-		if (file === url) {
-			done(null);
-			return;
-		}
-
-		if (!path.isAbsolute(file)) {
-			file = path.join(root, file);
-		}
-
-		done({ file });
+		err.message = messageArr.join('\n');
+		throw err;
 	}
 
 	return {
@@ -103,32 +149,18 @@ export default function sassPlugin({ production, sourcemap, root }) {
 			}
 
 			try {
-				const result = await renderSass({
-					// Custom options for logging
-					id,
-					file,
-					data: code,
-					includePaths: [path.dirname(id)],
-					importer: [
-						// Note: Async importers MUST return `undefined`, otherwise they
-						// don't work!!!
-						(url, prev, done) => {
-							sassResolver(url, prev, done, this.resolve.bind(this));
-						}
-					],
-					outputStyle: production ? 'compressed' : undefined,
-					sourceMap: sourcemap !== false
-				});
+				const result = await transformSass.call(this, id, file, code, root, production, sourcemap);
 
 				for (let file of result.includedFiles) {
 					// `node-sass` always returns unix style paths,
 					// even on windows
 					file = path.normalize(file);
-					this.addWatchFile(file);
+					if (mergedAssets) mergedAssets.add(file);
 
 					if (!fileToBundles.has(file)) {
 						fileToBundles.set(file, new Set());
 					}
+					this.addWatchFile(file);
 					// @ts-ignore
 					fileToBundles.get(file).add(id);
 				}
@@ -138,22 +170,7 @@ export default function sassPlugin({ production, sourcemap, root }) {
 					map: result.map || null
 				};
 			} catch (err) {
-				if (err.file) {
-					const code = await fs.readFile(err.file, 'utf-8');
-					err.codeFrame = createCodeFrame(code, err.line - 1, err.column);
-				}
-				// Sass mixes stack in message, therefore we need to extract
-				// just the message
-				let messageArr = [];
-				err.message.split('\n').some(line => {
-					if (/^\s*(?:\d+\s*)?[│╷]\s*/.test(line)) {
-						return true;
-					}
-					messageArr.push(line);
-				});
-
-				err.message = messageArr.join('\n');
-				throw err;
+				await handleError(err);
 			}
 		},
 		watchChange(id) {

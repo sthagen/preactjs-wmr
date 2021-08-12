@@ -127,6 +127,25 @@ describe('fixtures', () => {
 		expect(text).toMatch('it works');
 	});
 
+	it('should serve files from root dir as is', async () => {
+		await loadFixture('serve-fallback', env);
+		instance = await runWmrFast(env.tmp.path);
+		await getOutput(env, instance);
+
+		await withLog(instance.output, async () => {
+			await waitForPass(async () => {
+				expect(await env.page.content()).toMatch(/it works/);
+			});
+
+			expect(await env.page.evaluate(`fetch('10-seconds-of-silence').then(r => r.headers)`)).toEqual({});
+			expect(await env.page.evaluate(`fetch('extensionless').then(r => r.text())`)).toEqual('asdf');
+			expect(await env.page.evaluate(`fetch('.foo').then(r => r.status)`)).toEqual(404);
+
+			// Don't serve aliased files as is
+			expect(await env.page.evaluate(`fetch('/@alias/foo/bar').then(r => r.text())`)).not.toMatch('foobar');
+		});
+	});
+
 	describe('empty', () => {
 		it('should print warning for missing index.html file in public dir', async () => {
 			await loadFixture('empty', env);
@@ -456,6 +475,16 @@ describe('fixtures', () => {
 
 		it('should resolve js-style relative alias import', async () => {
 			await loadFixture('css-sass-alias-relative', env);
+			instance = await runWmrFast(env.tmp.path);
+			await getOutput(env, instance);
+
+			await withLog(instance.output, async () => {
+				expect(await env.page.$eval('h1', el => getComputedStyle(el).color)).toMatch(/rgb\(255, 0, 0\)/);
+			});
+		});
+
+		it('should resolve absolute imports', async () => {
+			await loadFixture('css-sass-absolute', env);
 			instance = await runWmrFast(env.tmp.path);
 			await getOutput(env, instance);
 

@@ -24,6 +24,7 @@ import { defaultLoaders } from './default-loaders.js';
 import { importAssertionPlugin } from '../plugins/import-assertion.js';
 import { acornDefaultPlugins } from './acorn-default-plugins.js';
 import { prefreshPlugin } from '../plugins/preact/prefresh.js';
+import { absolutePathPlugin } from '../plugins/absolute-path-plugin.js';
 
 /**
  * @param {import("wmr").Options} options
@@ -37,17 +38,19 @@ export function getPlugins(options) {
 	if (split === -1) split = plugins.length;
 
 	const production = mode === 'build';
+	const mergedAssets = new Set();
 
 	return [
 		acornDefaultPlugins(),
 		...plugins.slice(0, split),
 		features.preact && !production && prefreshPlugin({ sourcemap }),
-		production && htmlEntriesPlugin({ root, publicPath }),
+		production && htmlEntriesPlugin({ root, publicPath, mergedAssets, sourcemap }),
 		externalUrlsPlugin(),
 		nodeBuiltinsPlugin({ production }),
 		urlPlugin({ inline: !production, root, alias }),
 		jsonPlugin({ root }),
 		bundlePlugin({ inline: !production, cwd: root }),
+		absolutePathPlugin({ root }),
 		aliasPlugin({ alias }),
 		sucrasePlugin({
 			typescript: true,
@@ -62,7 +65,7 @@ export function getPlugins(options) {
 				exclude: /\/node_modules\//
 			}),
 		production && publicPathPlugin({ publicPath }),
-		sassPlugin({ production, sourcemap, root }),
+		sassPlugin({ production, sourcemap, root, mergedAssets }),
 		wmrStylesPlugin({ hot: !production, root, production, alias, sourcemap }),
 		processGlobalPlugin({
 			sourcemap,
@@ -88,7 +91,7 @@ export function getPlugins(options) {
 
 		production && optimizeGraphPlugin({ publicPath }),
 		minify && minifyCssPlugin({ sourcemap }),
-		production && copyAssetsPlugin({ root }),
+		production && copyAssetsPlugin({ root, mergedAssets }),
 		production && visualize && visualizer({ open: true, gzipSize: true, brotliSize: true })
 	].filter(Boolean);
 }
