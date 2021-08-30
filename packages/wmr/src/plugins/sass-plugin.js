@@ -110,6 +110,7 @@ export async function sassResolver(url, prev, done, pluginResolve, root) {
  * @param {boolean} opts.production
  * @param {boolean} opts.sourcemap
  * @param {string} opts.root
+ * @param {Set<string>} opts.mergedAssets
  * @returns {import('rollup').Plugin}
  */
 export default function sassPlugin({ production, sourcemap, root, mergedAssets }) {
@@ -155,7 +156,7 @@ export default function sassPlugin({ production, sourcemap, root, mergedAssets }
 					// `node-sass` always returns unix style paths,
 					// even on windows
 					file = path.normalize(file);
-					if (mergedAssets) mergedAssets.add(file);
+					mergedAssets.add(file);
 
 					if (!fileToBundles.has(file)) {
 						fileToBundles.set(file, new Set());

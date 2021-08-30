@@ -13,6 +13,7 @@ import { matchAlias, resolveAlias } from './lib/aliasing.js';
 import { addTimestamp } from './lib/net-utils.js';
 import { mergeSourceMaps } from './lib/sourcemap.js';
 import { isFile } from './lib/fs-utils.js';
+import { STYLE_REG } from './plugins/wmr/styles/styles-plugin.js';
 
 const NOOP = () => {};
 
@@ -74,6 +75,7 @@ export default function wmrMiddleware(options) {
 	const watcher = watch(watchDirs, {
 		cwd,
 		disableGlobbing: true,
+		ignoreInitial: true,
 		ignored: [/(^|[/\\])(node_modules|\.git|\.DS_Store)([/\\]|$)/, resolve(cwd, out), resolve(cwd, distDir)]
 	});
 	const pendingChanges = new Set();
@@ -118,16 +120,20 @@ export default function wmrMiddleware(options) {
 		return false;
 	}
 
-	watcher.on('change', filename => {
-		const absolute = resolve(cwd, filename);
+	/**
+	 * @param {string} absoluteId
+	 * @param {'create' | 'update' | 'delete'} changeType
+	 */
+	function applyWatchChanges(absoluteId, changeType) {
+		const event = { event: changeType };
 
 		const seen = new Set();
-		const items = [absolute];
+		const items = [absoluteId];
 		/** @type {string | undefined} */
 		let item;
 		while ((item = items.pop()) !== undefined) {
 			if (seen.has(item)) continue;
-			const res = NonRollup.watchChange(item);
+			const res = NonRollup.watchChange(item, event);
 			if (Array.isArray(res)) items.push(...res);
 			seen.add(item);
 		}
@@ -153,7 +159,7 @@ export default function wmrMiddleware(options) {
 				file = file.split(sep).join(posix.sep);
 			}
 
-			logWatcher(`${kl.cyan(originalFile)} -> ${kl.dim(file)} [change]`);
+			logWatcher(`${kl.cyan(originalFile)} -> ${kl.dim(file)} [${changeType}]`);
 
 			logCache(`delete: ${kl.cyan(file)}`);
 			WRITE_CACHE.delete(file);
@@ -192,7 +198,7 @@ export default function wmrMiddleware(options) {
 				bubbleUpdates(file + '?module');
 			}
 
-			if (/\.(css|s[ac]ss)$/.test(file)) {
+			if (STYLE_REG.test(file)) {
 				pendingChanges.add('/' + file);
 			} else if (/\.(mjs|[tj]sx?)$/.test(file)) {
 				if (!moduleGraph.has(file)) {
@@ -212,6 +218,21 @@ export default function wmrMiddleware(options) {
 				onChange({ reload: true });
 			}
 		}
+	}
+
+	watcher.on('add', filename => {
+		const absolute = resolve(cwd, filename);
+		applyWatchChanges(absolute, 'create');
+	});
+
+	watcher.on('unlink', filename => {
+		const absolute = resolve(cwd, filename);
+		applyWatchChanges(absolute, 'delete');
+	});
+
+	watcher.on('change', filename => {
+		const absolute = resolve(cwd, filename);
+		applyWatchChanges(absolute, 'update');
 	});
 
 	return async (req, res, next) => {
@@ -241,6 +262,12 @@ export default function wmrMiddleware(options) {
 			// Virtual paths have no exact file match, so we don't set `file`
 			hasIdPrefix = true;
 			id = path.slice('/@id/'.length);
+
+			// Add back leading slash if it was part of the virtual id.
+			// Example: `/@windicss/windi.css`
+			if (req.path.startsWith('/@id//')) {
+				id = '/' + id;
+			}
 		} else if (path.startsWith('/@alias/')) {
 			id = posix.normalize(path.slice('/@alias/'.length));
 
@@ -282,8 +309,13 @@ export default function wmrMiddleware(options) {
 		// Force serving as a js module for proxy modules. Main use
 		// case is CSS-Modules.
 		const isModule = queryParams.has('module');
+		const isAsset = queryParams.has('asset');
 
-		let type = isModule ? 'application/javascript;charset=utf-8' : getMimeType(file);
+		let type;
+		if (isModule) type = 'application/javascript;charset=utf-8';
+		else if (isAsset && /\.(?:s[ac]ss|less)$/.test(file)) type = 'text/css';
+		else type = getMimeType(file);
+
 		if (type) {
 			res.setHeader('Content-Type', type);
 		}
@@ -300,13 +332,7 @@ export default function wmrMiddleware(options) {
 			} else if (queryParams.has('asset')) {
 				cacheKey += '?asset';
 				transform = TRANSFORMS.asset;
-			} else if (
-				prefix ||
-				hasIdPrefix ||
-				isModule ||
-				/\.([mc]js|[tj]sx?)$/.test(file) ||
-				/\.(css|s[ac]ss)$/.test(file)
-			) {
+			} else if (prefix || hasIdPrefix || isModule || /\.([mc]js|[tj]sx?)$/.test(file) || STYLE_REG.test(file)) {
 				transform = TRANSFORMS.js;
 			} else if (file.startsWith(root + sep) && (await isFile(file))) {
 				// Ignore dotfiles
@@ -344,7 +370,7 @@ export default function wmrMiddleware(options) {
 				// Grab the asset id out of the compiled js
 				// TODO: Wire this up into Style-Plugin by passing the
 				// import type through resolution somehow
-				if (!isModule && /\.(css|s[ac]ss)$/.test(file) && typeof result === 'string') {
+				if (!isModule && STYLE_REG.test(file) && typeof result === 'string') {
 					const match = result.match(/style\(["']\/([^"']+?)["'].*?\);/m);
 
 					if (match) {
@@ -534,7 +560,11 @@ export const TRANSFORMS = {
 					const resolved = await NonRollup.resolveId(spec, file);
 					if (resolved) {
 						spec = typeof resolved == 'object' ? resolved.id : resolved;
-						if (/^(\/|\\|[a-z]:\\)/i.test(spec)) {
+						// Some rollup plugins use absolute paths as virtual identifiers :/
+						// Example: `/@windicss/windi.css`
+						if (/^\/@/.test(spec)) {
+							spec = `/@id/${spec}`;
+						} else if (/^(\/|\\|[a-z]:\\)/i.test(spec)) {
 							spec = relative(dirname(file), spec).split(sep).join(posix.sep);
 							if (!/^\.?\.?\//.test(spec)) {
 								spec = './' + spec;
@@ -579,7 +609,7 @@ export const TRANSFORMS = {
 						if (aliased) spec = aliased;
 					}
 
-					if (!spec.startsWith('/@alias/') && !/^\0?\.?\.?[/\\]/.test(spec)) {
+					if (!spec.startsWith('/@id/') && !spec.startsWith('/@alias/') && !/^\0?\.?\.?[/\\]/.test(spec)) {
 						// Check if the spec is an alias
 						const aliased = matchAlias(alias, spec);
 						if (aliased) spec = aliased;

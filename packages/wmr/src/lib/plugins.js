@@ -25,6 +25,7 @@ import { importAssertionPlugin } from '../plugins/import-assertion.js';
 import { acornDefaultPlugins } from './acorn-default-plugins.js';
 import { prefreshPlugin } from '../plugins/preact/prefresh.js';
 import { absolutePathPlugin } from '../plugins/absolute-path-plugin.js';
+import { lessPlugin } from '../plugins/less-plugin.js';
 
 /**
  * @param {import("wmr").Options} options
@@ -66,6 +67,7 @@ export function getPlugins(options) {
 			}),
 		production && publicPathPlugin({ publicPath }),
 		sassPlugin({ production, sourcemap, root, mergedAssets }),
+		lessPlugin({ sourcemap, mergedAssets, alias }),
 		wmrStylesPlugin({ hot: !production, root, production, alias, sourcemap }),
 		processGlobalPlugin({
 			sourcemap,
@@ -92,6 +94,13 @@ export function getPlugins(options) {
 		production && optimizeGraphPlugin({ publicPath }),
 		minify && minifyCssPlugin({ sourcemap }),
 		production && copyAssetsPlugin({ root, mergedAssets }),
-		production && visualize && visualizer({ open: true, gzipSize: true, brotliSize: true })
+		production &&
+			visualize &&
+			(visualizer.default || visualizer)({
+				// Don't open in unit tests
+				open: process.env.NODE_ENV !== 'test',
+				gzipSize: true,
+				brotliSize: true
+			})
 	].filter(Boolean);
 }

@@ -4,6 +4,7 @@ import { transformHtml } from '../lib/transform-html.js';
 import { yellow, bgYellow, bgRed, dim, bold, white, black, magenta, cyan } from 'kolorist';
 import { codeFrame } from '../lib/output-utils.js';
 import { transformSass } from './sass-plugin.js';
+import { renderLess } from './less-plugin.js';
 
 /** @typedef {import('rollup').OutputAsset & { referencedFiles: string[], importedIds: string[] }} ExtendedAsset */
 
@@ -24,6 +25,8 @@ const toSystemPath = p => p.split(posix.sep).join(sep);
  *
  * @param {object} options
  * @param {string} options.root
+ * @param {Set<string>} options.mergedAssets
+ * @param {boolean} options.sourcemap
  * @param {string} [options.publicPath] Prepend to generated filenames
  * @returns {import('rollup').Plugin}
  */
@@ -91,9 +94,16 @@ export default function htmlEntriesPlugin({ root, publicPath, sourcemap, mergedA
 				}
 
 				if (tag === 'link' && attrs && attrs.rel && /^stylesheet$/i.test(attrs.rel)) {
+					let assetName = url;
+
+					// Ensure that stylesheets have `.css` as an extension
+					if (/\.(?:s[ac]ss|less)$/.test(assetName)) {
+						assetName = posix.join(posix.dirname(url), posix.basename(url, posix.extname(url)) + '.css');
+					}
+
 					const ref = this.emitFile({
 						type: 'asset',
-						name: url.replace(/^\.\//, '')
+						name: assetName.replace(/^\.\//, '')
 					});
 					all.push(ref);
 					waiting.push(
@@ -103,6 +113,14 @@ export default function htmlEntriesPlugin({ root, publicPath, sourcemap, mergedA
 									for (let file of result.includedFiles) {
 										if (mergedAssets) mergedAssets.add(file);
 									}
+									this.setAssetSource(ref, result.css);
+								});
+							} else if (/\.less$/.test(abs)) {
+								return renderLess(source, { id: abs, sourcemap, resolve: this.resolve.bind(this) }).then(result => {
+									for (let file of result.imports) {
+										if (mergedAssets) mergedAssets.add(file);
+									}
+
 									this.setAssetSource(ref, result.css);
 								});
 							} else {

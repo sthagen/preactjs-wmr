@@ -2,6 +2,7 @@
 import path from 'path';
 import { promises as fs } from 'fs';
 import { setupTest, teardown, runWmr, loadFixture, serveStatic, withLog, updateFile } from './test-helpers.js';
+import { pathToFileURL } from 'url';
 import { printCoverage, analyzeTrace } from './tracing-helpers.js';
 
 jest.setTimeout(30000);
@@ -126,6 +127,24 @@ describe('production', () => {
 
 		const text = await env.page.content();
 		expect(text).toMatch(/it works/);
+	});
+
+	// Issue #811
+	it('should support virtual ids starting with /@', async () => {
+		await loadFixture('virtual-id-at', env);
+		instance = await runWmr(env.tmp.path, 'build');
+		const code = await instance.done;
+		expect(code).toEqual(0);
+
+		const { address, stop } = serveStatic(path.join(env.tmp.path, 'dist'));
+		cleanup.push(stop);
+
+		await env.page.goto(address, {
+			waitUntil: ['networkidle0', 'load']
+		});
+
+		const color = await env.page.$eval('h1', el => getComputedStyle(el).color);
+		expect(color).toBe('rgb(255, 0, 0)');
 	});
 
 	it("should preserve './' for relative specifiers", async () => {
@@ -315,7 +334,7 @@ describe('production', () => {
 
 			const code = await instance.done;
 			const dir = await fs.readdir(path.join(env.tmp.path, 'dist', 'assets'));
-			expect(dir.some(x => x.endsWith('.scss'))).toBeTruthy();
+			expect(dir.some(x => x.endsWith('.css'))).toBeTruthy();
 			expect(code).toEqual(0);
 			const { address, stop } = serveStatic(path.join(env.tmp.path, 'dist'));
 			cleanup.push(stop);
@@ -332,7 +351,7 @@ describe('production', () => {
 			await instance.done;
 			const dir = await fs.readdir(path.join(env.tmp.path, 'dist'));
 			const [cssFile] = await fs.readdir(path.join(env.tmp.path, 'dist', 'assets'));
-			expect(dir.some(x => x.endsWith('.scss') || x.endsWith('.css'))).toBeFalsy();
+			expect(dir.some(x => x.endsWith('.css'))).toBeFalsy();
 			const hash = cssFile.split('.')[1];
 
 			await updateFile(path.join(env.tmp.path, 'public'), '2.scss', content => content.replace('green', 'red'));
@@ -351,7 +370,7 @@ describe('production', () => {
 			await instance.done;
 			const dir = await fs.readdir(path.join(env.tmp.path, 'dist'));
 			const [cssFile] = await fs.readdir(path.join(env.tmp.path, 'dist', 'assets'));
-			expect(dir.some(x => x.endsWith('.scss') || x.endsWith('.css'))).toBeFalsy();
+			expect(dir.some(x => x.endsWith('.css'))).toBeFalsy();
 			const hash = cssFile.split('.')[1];
 
 			await updateFile(path.join(env.tmp.path, 'public'), '2.scss', content => content.replace('green', 'red'));
@@ -908,6 +927,27 @@ describe('production', () => {
 
 			const chunks = await readdir('dist/about');
 			expect(chunks).toEqual(['index.html']);
+		});
+	});
+
+	describe('--visualize', () => {
+		it('should create stats.html', async () => {
+			await loadFixture('simple', env);
+			instance = await runWmr(env.tmp.path, 'build', '--visualize');
+			const code = await instance.done;
+
+			await withLog(instance.output, async () => {
+				expect(code).toBe(0);
+
+				const stats = path.join(env.tmp.path, 'stats.html');
+				const statsUrl = pathToFileURL(stats);
+
+				await env.page.goto(statsUrl.href, {
+					waitUntil: ['networkidle0', 'load']
+				});
+
+				expect(await env.page.content()).toMatch(/RollUp Visualizer/);
+			});
 		});
 	});
 });

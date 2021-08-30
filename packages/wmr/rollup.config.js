@@ -51,7 +51,7 @@ const config = {
 			}
 		]
 	},
-	external: [...builtins],
+	external: [...builtins, 'less'],
 	// /* Logs all included npm dependencies: */
 	// external(source, importer) {
 	// 	const ch = source[0];
@@ -119,26 +119,23 @@ const config = {
 			// rather than bundleds as fs.readFile()
 			name: 'fix-visualizer',
 			transform(code, id) {
-				if (/rollup-plugin-visualizer[/\\]plugin[/\\]build-stats\.js$/.test(id)) {
-					code = code.replace(
-						/fs\.readFile\(path\.join\(__dirname,\s*(.+?)\)\s*,\s*"utf8"\s*\)/g,
-						(str, stringifiedJoin) => {
-							const path = require('path');
-							const fs = require('fs');
-							const filePathParts = stringifiedJoin
-								.replace(/['"`]+/g, '')
-								.replace(/\$\{template\}/g, 'treemap')
-								.split(', ');
-							const filepath = path.resolve(path.dirname(id), ...filePathParts);
-							try {
-								const text = fs.readFileSync(filepath, 'utf-8');
-								return `Promise.resolve(${JSON.stringify(text)})`;
-							} catch (err) {
-								this.warn(`Failed to inline ${filepath} into ${id}:\n${err.message}`);
-								return `Promise.reject(Error(${JSON.stringify(err.message)}))`;
-							}
+				if (/rollup-plugin-visualizer[/\\]dist[/\\]plugin[/\\]build-stats\.js$/.test(id)) {
+					code = code.replace(/fs.*readFile.*\(__dirname,\s*(.+?)\)\s*,\s*"utf8"\s*\)/g, (_str, stringifiedJoin) => {
+						const path = require('path');
+						const fs = require('fs');
+						const filePathParts = stringifiedJoin
+							.replace(/['"`]+/g, '')
+							.replace(/\$\{template\}/g, 'treemap')
+							.split(', ');
+						const filepath = path.resolve(path.dirname(id), ...filePathParts);
+						try {
+							const text = fs.readFileSync(filepath, 'utf-8');
+							return `Promise.resolve(${JSON.stringify(text)})`;
+						} catch (err) {
+							this.warn(`Failed to inline ${filepath} into ${id}:\n${err.message}`);
+							return `Promise.reject(Error(${JSON.stringify(err.message)}))`;
 						}
-					);
+					});
 					return { code, map: null };
 				}
 			}
@@ -169,10 +166,14 @@ const config = {
 		commonjs({
 			exclude: [/\.mjs$/, /\/rollup\//, resolve('src')],
 			ignore: builtins,
-			transformMixedEsModules: true
+			transformMixedEsModules: true,
+			requireReturnsDefault: 'preferred'
 		}),
 		nodeResolve({
 			preferBuiltins: true,
+			// Rollup prefers "default" by default and rollup itself points to a
+			// browser build there...
+			exportConditions: ['node', 'import', 'module', 'default'],
 			extensions: ['.mjs', '.js', '.json', '.es6', '.node']
 		}),
 		json()

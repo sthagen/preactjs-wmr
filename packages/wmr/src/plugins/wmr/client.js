@@ -56,7 +56,7 @@ function handleMessage(e) {
 			data.changes.forEach(url => {
 				url = resolve(url);
 				if (!mods.get(url)) {
-					if (/\.(css|s[ac]ss)$/.test(url)) {
+					if (/\.(css|s[ac]ss|less)$/.test(url)) {
 						if (mods.has(url + '?module')) {
 							url += '?module';
 						} else {
@@ -411,4 +411,19 @@ function createErrorOverlay(data) {
 
 	document.body.appendChild(iframe);
 	return iframe;
+}
+
+/**
+ * Removes the debug SW installed by Preact-CLI if it is active.
+ * Overlap between WMR and Preact-CLI users shows this is a semi-common
+ * and recurring issue.
+ */
+if ('serviceWorker' in navigator) {
+	navigator.serviceWorker.getRegistrations().then(registrations => {
+		for (const registration of registrations) {
+			if (registration.active?.scriptURL.endsWith('/sw-debug.js')) {
+				registration.unregister();
+			}
+		}
+	});
 }
