@@ -89,7 +89,8 @@ export function createPluginContainer(plugins, opts = {}) {
 			file: opts.output && opts.output.file,
 			entryFileNames: opts.output && opts.output.entryFileNames,
 			chunkFileNames: opts.output && opts.output.chunkFileNames,
-			assetFileNames: opts.output && opts.output.assetFileNames
+			assetFileNames: opts.output && opts.output.assetFileNames,
+			format: opts.output && opts.output.format
 		},
 		parse(code, opts) {
 			return parser.parse(code, {
@@ -123,15 +124,20 @@ export function createPluginContainer(plugins, opts = {}) {
 			return mod.info;
 		},
 		emitFile(assetOrFile) {
-			const { type, name, fileName } = assetOrFile;
-			const source = assetOrFile.type === 'asset' && assetOrFile.source;
+			const { type, fileName } = assetOrFile;
+			const name = type === 'chunk' ? assetOrFile.name || assetOrFile.id : assetOrFile.name;
+			const source = type === 'asset' && assetOrFile.source;
 			const id = String(++ids);
 			const filename = fileName || generateFilename({ type, name, source, fileName });
 			files.set(id, { id, name, filename });
-			if (source) {
-				if (type === 'chunk') {
+
+			if (type === 'chunk') {
+				if (source) {
 					throw Error(`emitFile({ type:"chunk" }) cannot include a source`);
 				}
+
+				// TODO: We probably need to process the chunk manually from here
+			} else if (source) {
 				if (opts.writeFile) opts.writeFile(filename, source);
 				else fs.writeFile(filename, source);
 			}
@@ -155,6 +161,16 @@ export function createPluginContainer(plugins, opts = {}) {
 		warn(...args) {
 			// eslint-disable-next-line no-console
 			console.log(`[${plugin.name}]`, ...args);
+		},
+		// Rollup has typed the return value as `never` because they
+		// throw and abort the build. Doing that in "development"
+		// mode would be very annoying so we intentionally have a
+		// type mismatch.
+		// @ts-ignore
+		error(err) {
+			if (typeof err === 'string') err = { message: err };
+			// eslint-disable-next-line no-console
+			console.log(`[${plugin.name}]`, err.message);
 		}
 	};
 
@@ -191,6 +207,18 @@ export function createPluginContainer(plugins, opts = {}) {
 					}
 				})
 			);
+		},
+
+		outputOptions() {
+			for (plugin of plugins) {
+				if (!plugin.outputOptions) continue;
+
+				const opts = ctx.outputOptions;
+				const result = plugin.outputOptions.call(ctx, opts);
+				if (result) {
+					ctx.outputOptions = { opts, ...result };
+				}
+			}
 		},
 
 		/**
