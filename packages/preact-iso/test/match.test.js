@@ -21,6 +21,31 @@ describe('match', () => {
 		expect(inaccurateResult).toEqual(undefined);
 	});
 
+	it('Param rest segment', () => {
+		const accurateResult = execPath('/user/foo', '/user/*');
+		expect(accurateResult).toEqual({ path: '/user/foo', params: {}, query: {}, rest: '/foo' });
+
+		const inaccurateResult = execPath('/', '/user/:id/*');
+		expect(inaccurateResult).toEqual(undefined);
+	});
+
+	it('Param route with rest segment', () => {
+		const accurateResult = execPath('/user/2/foo', '/user/:id/*');
+		expect(accurateResult).toEqual({ path: '/user/2/foo', params: { id: '2' }, id: '2', query: {}, rest: '/foo' });
+
+		const accurateResult2 = execPath('/user/2/foo/bar/bob', '/user/:id/*');
+		expect(accurateResult2).toEqual({
+			path: '/user/2/foo/bar/bob',
+			params: { id: '2' },
+			id: '2',
+			query: {},
+			rest: '/foo/bar/bob'
+		});
+
+		const inaccurateResult = execPath('/', '/user/:id/*');
+		expect(inaccurateResult).toEqual(undefined);
+	});
+
 	it('Optional param route', () => {
 		const accurateResult = execPath('/user', '/user/:id?');
 		expect(accurateResult).toEqual({ path: '/user', params: { id: undefined }, id: undefined, query: {} });

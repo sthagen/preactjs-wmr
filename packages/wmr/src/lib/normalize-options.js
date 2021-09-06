@@ -21,7 +21,6 @@ export async function normalizeOptions(options, mode, configWatchFiles = []) {
 
 	options.root = options.cwd;
 
-	options.minify = mode === 'build';
 	options.plugins = [];
 	options.output = [];
 	options.middleware = [];
@@ -153,7 +152,7 @@ export async function normalizeOptions(options, mode, configWatchFiles = []) {
 	 */
 	const runConfigHook = async (name, plugins) => {
 		for (const plugin of plugins) {
-			if (!plugin[name]) return;
+			if (!plugin[name]) continue;
 
 			const res = await plugin[name](options);
 			if (res) {
@@ -205,15 +204,22 @@ export async function normalizeOptions(options, mode, configWatchFiles = []) {
 	// Sort plugins by "enforce" phase. Default is "normal".
 	// The execution order is: "pre" -> "normal" -> "post"
 	if (options.plugins) {
-		options.plugins = options.plugins.flat().sort((a, b) => {
-			const aScore = a.enforce === 'post' ? 1 : a.enforce === 'pre' ? -1 : 0;
-			const bScore = b.enforce === 'post' ? 1 : b.enforce === 'pre' ? -1 : 0;
-			return aScore - bScore;
-		});
+		options.plugins = options.plugins
+			.flat()
+			// Filter out falsy values caused by conditionals
+			.filter(Boolean)
+			.sort((a, b) => {
+				const aScore = a.enforce === 'post' ? 1 : a.enforce === 'pre' ? -1 : 0;
+				const bScore = b.enforce === 'post' ? 1 : b.enforce === 'pre' ? -1 : 0;
+				return aScore - bScore;
+			});
 	}
 
 	await runConfigHook('config', options.plugins);
 	await runConfigHook('configResolved', options.plugins);
+
+	// Filter out falsy values caused by conditionals
+	options.middleware = options.middleware.filter(Boolean);
 
 	if (prevPublicFolder !== options.public) {
 		// If the CWD has a public/ directory, all files are assumed to be within it.

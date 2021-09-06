@@ -3,6 +3,10 @@ import { createCodeFrame } from 'simple-code-frame';
 import * as util from 'util';
 import path from 'path';
 
+export function wmrCodeFrame(code, line, column, options = {}) {
+	return createCodeFrame(code, line, column, { maxWidth: Math.min(80, process.stdout.columns - 4), ...options });
+}
+
 /**
  * @param {import('rollup').RollupOutput} bundle
  * @param {string} outDir
@@ -11,7 +15,18 @@ export function bundleStats(bundle, outDir) {
 	let total = 0;
 	const assets = bundle.output
 		.filter(asset => !/\.map$/.test(asset.fileName))
-		.sort((a, b) => scoreAsset(b) - scoreAsset(a));
+		.sort((a, b) => {
+			const scoreB = scoreAsset(b);
+			const scoreA = scoreAsset(a);
+
+			if (scoreA === scoreB) {
+				const contentA = a.type === 'asset' ? a.source : a.code;
+				const contentB = b.type === 'asset' ? b.source : b.code;
+				return contentB.length - contentA.length;
+			}
+
+			return scoreB - scoreA;
+		});
 
 	let nonCssAsset = false;
 	const assetsText = assets.reduce((str, output) => {
@@ -55,7 +70,7 @@ function scoreAsset(asset) {
 	}
 	// ...then CSS files
 	else if (/\.css$/.test(asset.fileName)) {
-		return 10;
+		return 9;
 	}
 
 	// ...and everything else after that
@@ -94,7 +109,7 @@ export function codeFrame(code, loc, { before = 2, after = 3 } = {}) {
 		({ line, column } = loc);
 	}
 
-	return createCodeFrame(code, line - 1, column, { before, after, colors: true });
+	return wmrCodeFrame(code, line - 1, column, { before, after, colors: true });
 }
 
 // Taken from https://github.com/visionmedia/debug/blob/e47f96de3de5921584364b4ac91e2769d22a3b1f/src/node.js#L35
@@ -220,4 +235,44 @@ export function formatBootMessage(message, addresses) {
 	}
 
 	return `${intro}${local}${network}\n`;
+}
+
+function formatWarnMessage(str) {
+	return str !== kl.stripColors(str) ? kl.yellow('(!) ') + str : kl.yellow('(!) ' + str);
+}
+
+/** @type {import('rollup').WarningHandlerWithDefault} */
+export function onWarn(warning) {
+	if (typeof warning === 'string') {
+		// eslint-disable-next-line no-console
+		console.log(formatWarnMessage(warning));
+		return;
+	}
+
+	const { message, loc, frame } = warning;
+	let msg = formatWarnMessage(message) + '\n';
+
+	if (loc && loc.file) {
+		msg += `${kl.cyan(`${loc.file}:${loc.line}:${loc.column}`)}\n`;
+	}
+
+	// Reformat code frame to match our format
+	if (frame) {
+		const lines = frame.split('\n');
+		const max = Math.max(...lines.map(x => x.indexOf(':')).filter(x => x >= 0));
+
+		const reformatted = lines
+			.map(line => {
+				if (/\s+\^/.test(line)) {
+					return kl.red('> ') + ' '.repeat(max) + kl.dim(' |') + kl.red(line.slice(max + 1));
+				}
+
+				return line.replace(/^(\d+): /, (_, g) => '  ' + kl.dim(g) + kl.dim(' | '));
+			})
+			.join('\n');
+		msg += `${reformatted}\n`;
+	}
+
+	// eslint-disable-next-line no-console
+	console.log(msg);
 }

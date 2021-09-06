@@ -68,6 +68,36 @@ export default function transformJsxToHtmLite({ types: t }, options = {}) {
 						path.appendString('`');
 					}
 				}
+
+				// Remove all JS-style comments in between JSXAttributes.
+				// This includes both single line comments and multi line ones.
+				//   <A /* comment */ foo="a" /* other comment */ />
+				//   <div
+				//     // comment
+				//     id="foo"
+				//     // other comment
+				//   />
+				//
+				// Result:
+				//   <A  foo="a"  />
+				//   <div
+				//     id="foo"
+				//   />
+				let last = name.end;
+				let comments = path.hub.file.ast.comments;
+
+				if (comments.length > 0) {
+					let attrs = path.node.attributes || [];
+					for (let comment of comments) {
+						if (comment.start >= last && comment.end < path.end) {
+							// Don't transform comments to HTML if they're within a JSXExpression
+							let inExpression = attrs.some(attr => comment.start >= attr.start && comment.end <= attr.end);
+							if (!inExpression) {
+								path.ctx.out.remove(comment.start, comment.end);
+							}
+						}
+					}
+				}
 			},
 			JSXClosingElement(path) {
 				let name = path.node.name.name;
