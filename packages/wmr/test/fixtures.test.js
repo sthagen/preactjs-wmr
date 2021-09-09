@@ -54,6 +54,12 @@ describe('fixtures', () => {
 		expect(await getOutput(env, instance)).toMatch(`class fields work`);
 	});
 
+	it('should support static class-fields', async () => {
+		await loadFixture('class-fields-static', env);
+		instance = await runWmrFast(env.tmp.path);
+		expect(await getOutput(env, instance)).toMatch(`class fields work`);
+	});
+
 	it('should support private class-fields', async () => {
 		await loadFixture('class-fields-private', env);
 		instance = await runWmrFast(env.tmp.path);
@@ -64,6 +70,15 @@ describe('fixtures', () => {
 		await loadFixture('logical-assignment', env);
 		instance = await runWmrFast(env.tmp.path);
 		expect(await getOutput(env, instance)).toMatch(`{"foo":"foo","baz":"qux"}`);
+	});
+
+	it('should hide "this is undefined" warning', async () => {
+		await loadFixture('this-undefined', env);
+
+		instance = await runWmrFast(env.tmp.path);
+		await getOutput(env, instance);
+
+		expect(instance.output.join('\n')).not.toMatch(/The 'this' keyword is/);
 	});
 
 	it('should not if sub-import is not in export map', async () => {
@@ -829,6 +844,42 @@ describe('fixtures', () => {
 					typeofEnv: 'object',
 					typeofWMR_A: 'string'
 				}
+			});
+		});
+
+		it('should not replace false positives', async () => {
+			await loadFixture('process-present', env);
+			instance = await runWmrFast(env.tmp.path);
+			await withLog(instance.output, async () => {
+				const output = await getOutput(env, instance);
+				expect(output).toMatch(/it works/i);
+			});
+		});
+
+		it('should not replace false positives in import namespace', async () => {
+			await loadFixture('process-present-import-ns', env);
+			instance = await runWmrFast(env.tmp.path);
+			await withLog(instance.output, async () => {
+				const output = await getOutput(env, instance);
+				expect(output).toMatch(/it works/i);
+			});
+		});
+
+		it('should not replace false positives in import default', async () => {
+			await loadFixture('process-present-import-default', env);
+			instance = await runWmrFast(env.tmp.path);
+			await withLog(instance.output, async () => {
+				const output = await getOutput(env, instance);
+				expect(output).toMatch(/it works/i);
+			});
+		});
+
+		it('should not replace false positives in import specifier', async () => {
+			await loadFixture('process-present-import-id', env);
+			instance = await runWmrFast(env.tmp.path);
+			await withLog(instance.output, async () => {
+				const output = await getOutput(env, instance);
+				expect(output).toMatch(/it works/i);
 			});
 		});
 	});
