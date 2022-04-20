@@ -70,7 +70,7 @@ async function workerCode({ cwd, out, publicPath, customRoutes }) {
 	// Grab the generated HTML file, which we'll use as a template:
 	const tpl = await fs.readFile(path.resolve(cwd, out, 'index.html'), 'utf-8');
 
-	// The first script in the file that is not external is assumed to have a
+	// The last script in the file that is not external is assumed to have a
 	// `prerender` export
 	let script;
 	const SCRIPT_TAG = /<script(?:\s[^>]*?)?\s+src=(['"]?)([^>]*?)\1(?:\s[^>]*?)?>/g;
@@ -103,7 +103,7 @@ async function workerCode({ cwd, out, publicPath, customRoutes }) {
 	// const App = m.default || m[Object.keys(m)[0]];
 
 	if (typeof doPrerender !== 'function') {
-		throw Error(`No prerender() function was exported by the first <script src="..."> in your index.html.`);
+		throw Error(`No prerender() function was exported by the last non-external <script src="..."> in your index.html.`);
 	}
 
 	/**
@@ -179,7 +179,7 @@ async function workerCode({ cwd, out, publicPath, customRoutes }) {
 			}
 
 			if (result.data && typeof result.data === 'object') {
-				body += `<script type="isodata">${JSON.stringify(result.data)}</script>`;
+				body += `<script type="wmrdata">${JSON.stringify(result.data)}</script>`;
 			} else if (result.data) {
 				console.warn('You passed in prerender-data in a non-object format: ', result.data);
 			}
@@ -211,10 +211,10 @@ async function workerCode({ cwd, out, publicPath, customRoutes }) {
 			html = html.replace(/(<html(\s[^>]*?)?>)/, `<html lang="${enc(head.lang)}">`);
 		}
 
-		html = html.replace(/(<\/head>)/, headHtml + '$1');
+		html = html.replace(/(<\/head>)/, (_, groupMatched) => headHtml + groupMatched);
 
 		// Inject pre-rendered HTML into the start of <body>:
-		html = html.replace(/(<body(\s[^>]*?)?>)/, '$1' + body);
+		html = html.replace(/(<body(\s[^>]*?)?>)/, (_, groupMatched) => groupMatched + body);
 
 		// Write the generated HTML to disk:
 		await fs.mkdir(path.dirname(outFile), { recursive: true }).catch(Object);
