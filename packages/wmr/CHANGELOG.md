@@ -1,5 +1,31 @@
 # wmr
 
+## 3.8.0
+
+### Minor Changes
+
+- [`2d768a1`](https://github.com/preactjs/wmr/commit/2d768a13e7b42ff62430a0a573706f5620b842c6) [#875](https://github.com/preactjs/wmr/pull/875) Thanks [@JoviDeCroock](https://github.com/JoviDeCroock)! - Add a tsconfig-paths plugin that will check for a tsconfig and respect the paths option when present
+
+* [`c0b0b1b`](https://github.com/preactjs/wmr/commit/c0b0b1b8df5ca6a650a7dc8f8edad73bf70de52d) [#934](https://github.com/preactjs/wmr/pull/934) Thanks [@takurinton](https://github.com/takurinton)! - Adds resource fetch shim for prererendering
+
+### Patch Changes
+
+- [`31583c7`](https://github.com/preactjs/wmr/commit/31583c7d77f91fc9d69bb3bcc2919a6f80f7d3b4) [#904](https://github.com/preactjs/wmr/pull/904) Thanks [@rschristian](https://github.com/rschristian)! - Ensures config file has been merged before attempting to create output directory
+
+* [`2465fbb`](https://github.com/preactjs/wmr/commit/2465fbba9e0888d2191d0fbcf613b26e81b4640e) [#895](https://github.com/preactjs/wmr/pull/895) Thanks [@rschristian](https://github.com/rschristian)! - Fix lack of hydration when not returning prerender data
+
+- [`69b0496`](https://github.com/preactjs/wmr/commit/69b04968336ca3a3137a286381afe4dc8de2e03b) [#900](https://github.com/preactjs/wmr/pull/900) Thanks [@rschristian](https://github.com/rschristian)! - Ensures leading newline in text nodes is not converted to whitespace
+
+* [`d9de528`](https://github.com/preactjs/wmr/commit/d9de52831831bacf3a0afc62f40eab521542c174) [#901](https://github.com/preactjs/wmr/pull/901) Thanks [@rschristian](https://github.com/rschristian)! - Disables (non-actionable) browserslist warning
+
+- [`f75af7c`](https://github.com/preactjs/wmr/commit/f75af7cc52460548c077b1f8a56d778962856107) [#905](https://github.com/preactjs/wmr/pull/905) Thanks [@rschristian](https://github.com/rschristian)! - First script tag in HTML should be assumed to have prerender(), not last
+
+* [`21ec4f4`](https://github.com/preactjs/wmr/commit/21ec4f4cf8cd159b3f2542773f381a99661a4e2f) [#913](https://github.com/preactjs/wmr/pull/913) Thanks [@cristianbote](https://github.com/cristianbote)! - When prerendering avoid replacing regex group token \$1 when is present in html contents
+
+- [`b849238`](https://github.com/preactjs/wmr/commit/b8492382ea2d35aa028e36ed0207c7c4742b1bd3) [#924](https://github.com/preactjs/wmr/pull/924) Thanks [@rschristian](https://github.com/rschristian)! - Supports top-level await in dev
+
+* [`b38a8f2`](https://github.com/preactjs/wmr/commit/b38a8f234eb03ee0b6ecbec916b0cf3080a64513) [#908](https://github.com/preactjs/wmr/pull/908) Thanks [@rschristian](https://github.com/rschristian)! - Corrects duplicated information in CLI help menu
+
 ## 3.7.2
 
 ### Patch Changes
